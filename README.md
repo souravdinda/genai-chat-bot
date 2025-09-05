@@ -21,6 +21,21 @@ The API receives requests via API Gateway, processes them through Lambda, and st
 
 ---
 
+## ✅ Resources Created by CloudFormation
+| Resource Logical ID     | AWS Service      | Description                                         |
+|-------------------------|-----------------|---------------------------------------------------|
+| `AuditLogBucket`       | Amazon S3       | Stores API request payloads as audit logs         |
+| `LambdaExecutionRole`  | IAM Role        | Grants Lambda permissions to S3 & CloudWatch      |
+| `ChatLambdaFunction`   | AWS Lambda      | Processes API requests and logs data to S3        |
+| `ApiGatewayRestApi`    | API Gateway     | Creates REST API with `/chat` endpoint            |
+| `ApiGatewayResource`   | API Gateway     | Resource path `/chat` under the API               |
+| `ApiGatewayMethod`     | API Gateway     | POST method integrated with Lambda                |
+| `ApiGatewayDeployment` | API Gateway     | Deployment for the API stage                      |
+| `ApiGatewayStage`      | API Gateway     | Defines stage (e.g., `dev`) for the API           |
+| `LambdaInvokePermission`| Lambda Permission | Allows API Gateway to invoke the Lambda function |
+
+---
+
 ## ✅ Parameters
 | Parameter             | Description                                      | Default               |
 |----------------------|--------------------------------------------------|----------------------|
