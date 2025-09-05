@@ -1,4 +1,4 @@
-# genai-chat-bot (API Gateway + Lambda + S3 Audit Logging using CloudFormation)
+# genai-chat-bot 
 
 ## ✅ Overview
 The **genai-chat-bot** project provisions an **Amazon API Gateway**, **AWS Lambda function**, and an **S3 audit log bucket** using AWS CloudFormation.  
