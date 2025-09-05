@@ -1,4 +1,4 @@
-# genai-chat-bot 
+# Genai Chat Bot 
 
 ## ✅ Overview
 The **genai-chat-bot** project provisions an **Amazon API Gateway**, **AWS Lambda function**, and an **S3 audit log bucket** using AWS CloudFormation.  
