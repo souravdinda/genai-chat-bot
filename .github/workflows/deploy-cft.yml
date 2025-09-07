@@ -23,13 +23,13 @@ jobs:
         run: |
           aws s3 cp ./cft s3://henry-sourav-workspace/ --recursive
 
-      # - name: Deploy CloudFormation Stack
-      #   run: |
-      #     aws cloudformation deploy \
-      #       --template-file ./cft/main.yml \
-      #       --stack-name MyStack \
-      #       --capabilities CAPABILITY_NAMED_IAM \
-      #       --s3-bucket my-cft-bucket
+      - name: Deploy CloudFormation Stack
+        run: |
+          aws cloudformation deploy \
+            --template-file bot.yaml \
+            --stack-name genai-chat-bot \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --s3-bucket henry-sourav-workspace
 
       # - name: Show Stack Outputs
       #   run: |
