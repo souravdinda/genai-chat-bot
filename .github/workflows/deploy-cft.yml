@@ -26,9 +26,10 @@ jobs:
       - name: Deploy CloudFormation Stack
         run: |
           aws cloudformation deploy \
-            --template-file s3://henry-sourav-workspace/bot.yaml \
-            --stack-name genai-chat-bot \
-            --capabilities CAPABILITY_NAMED_IAM
+          --template-url https://henry-sourav-workspace.s3.us-east-1.amazonaws.com/bot.yaml \
+          --stack-name genai-chat-bot \
+          --capabilities CAPABILITY_NAMED_IAM
+
 
       # - name: Show Stack Outputs
       #   run: |
