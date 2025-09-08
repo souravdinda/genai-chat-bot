@@ -34,5 +34,5 @@ jobs:
       - name: Show Stack Outputs
         run: |
           aws cloudformation describe-stacks \
-            --stack-name MyStack \
+            --stack-name genai-chat-bot \
             --query "Stacks[0].Outputs"
