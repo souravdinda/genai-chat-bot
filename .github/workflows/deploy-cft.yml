@@ -31,9 +31,8 @@ jobs:
           --capabilities CAPABILITY_NAMED_IAM \
           --s3-bucket henry-sourav-workspace
 
-
-      # - name: Show Stack Outputs
-      #   run: |
-      #     aws cloudformation describe-stacks \
-      #       --stack-name MyStack \
-      #       --query "Stacks[0].Outputs"
+      - name: Show Stack Outputs
+        run: |
+          aws cloudformation describe-stacks \
+            --stack-name MyStack \
+            --query "Stacks[0].Outputs"
