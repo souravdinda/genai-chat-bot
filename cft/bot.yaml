@@ -1,10 +1,12 @@
-AWSTemplateFormatVersion: 2010-09-09
-Description: Parameterized API Gateway + Lambda + S3 for audit logs with unique bucket name
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  genai-chat-bot — VPC + NAT + Lambda (in private subnet) + API Gateway (public) + S3 audit bucket.
+  Lambda will run in the private subnet and use NAT Gateway in the public subnet for outbound access (to S3).
 
 Parameters:
   LambdaFunctionName:
     Type: String
-    Default: api-lambda
+    Default: genai-chat-lambda
     Description: Name of the Lambda function.
 
   LambdaRuntime:
@@ -20,7 +22,7 @@ Parameters:
 
   ApiName:
     Type: String
-    Default: chat-api
+    Default: genai-chat-api
     Description: Name of the API Gateway REST API.
 
   ApiStageName:
@@ -33,42 +35,206 @@ Parameters:
     Default: audit-logs-bucket
     Description: Base name for the S3 bucket to store audit logs.
 
+  VpcCidr:
+    Type: String
+    Default: 10.0.0.0/16
+    Description: VPC CIDR block.
+
+  PublicSubnetCidr:
+    Type: String
+    Default: 10.0.1.0/24
+    Description: Public subnet CIDR (for NAT gateway).
+
+  PrivateSubnetCidr:
+    Type: String
+    Default: 10.0.2.0/24
+    Description: Private subnet CIDR (for Lambda).
+
 Resources:
 
-  ### S3 Bucket for Audit Logs
+  ################################################
+  # Networking: VPC, Subnets, IGW, NAT, Routes
+  ################################################
+
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-vpc"
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PublicSubnetCidr
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-public-subnet"
+
+  PrivateSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateSubnetCidr
+      MapPublicIpOnLaunch: false
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-private-subnet"
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-igw"
+
+  AttachInternetGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  NatEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    DependsOn: AttachInternetGateway
+    Properties:
+      AllocationId: !GetAtt NatEIP.AllocationId
+      SubnetId: !Ref PublicSubnet
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-natgw"
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-public-rt"
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachInternetGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-private-rt"
+
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+
+  PrivateSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet
+      RouteTableId: !Ref PrivateRouteTable
+
+  ################################################
+  # Security Group for Lambda
+  ################################################
+
+  LambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Lambda in private subnet
+      VpcId: !Ref VPC
+      SecurityGroupIngress: []   # no inbound rules (Lambda initiates outbound)
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-lambda-sg"
+
+  ################################################
+  # S3 Audit Bucket (unique name)
+  ################################################
+
   AuditBucket:
     Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
     Properties:
       BucketName: !Sub "${AuditBucketName}-${AWS::AccountId}-${AWS::Region}"
       VersioningConfiguration:
         Status: Enabled
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-audit-bucket"
 
-  ### Lambda Execution Role
+  ################################################
+  # IAM Role for Lambda
+  ################################################
+
   LambdaExecutionRole:
     Type: AWS::IAM::Role
     Properties:
       RoleName: !Sub "${AWS::StackName}-lambda-role"
       AssumeRolePolicyDocument:
-        Version: "2012-10-17"
+        Version: '2012-10-17'
         Statement:
           - Effect: Allow
             Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
       Policies:
-        - PolicyName: S3AccessPolicy
+        - PolicyName: AuditS3Policy
           PolicyDocument:
-            Version: "2012-10-17"
+            Version: '2012-10-17'
             Statement:
               - Effect: Allow
                 Action:
                   - s3:PutObject
                   - s3:GetObject
-                Resource: !Sub "arn:aws:s3:::${AuditBucketName}-${AWS::AccountId}-${AWS::Region}/*"
+                  - s3:ListBucket
+                Resource:
+                  - !Sub "arn:aws:s3:::${AuditBucketName}-${AWS::AccountId}-${AWS::Region}"
+                  - !Sub "arn:aws:s3:::${AuditBucketName}-${AWS::AccountId}-${AWS::Region}/*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: arn:aws:logs:*:*:*
 
-  ### Lambda Function
+  ################################################
+  # Lambda Function (in private subnet)
+  ################################################
+
   APILambdaFunction:
     Type: AWS::Lambda::Function
     Properties:
@@ -76,29 +242,43 @@ Resources:
       Runtime: !Ref LambdaRuntime
       Handler: index.lambda_handler
       Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 60
+      MemorySize: 512
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+        SubnetIds:
+          - !Ref PrivateSubnet
+      Environment:
+        Variables:
+          AUDIT_BUCKET: !Sub "${AuditBucketName}-${AWS::AccountId}-${AWS::Region}"
       Code:
         ZipFile: |
           import json
           import boto3
           import os
-
           s3 = boto3.client('s3')
           bucket_name = os.environ.get('AUDIT_BUCKET')
 
           def lambda_handler(event, context):
-              key = f"audit-{context.aws_request_id}.json"
-              s3.put_object(Bucket=bucket_name, Key=key, Body=json.dumps(event))
+              try:
+                  key = f"audit-{context.aws_request_id}.json"
+                  s3.put_object(Bucket=bucket_name, Key=key, Body=json.dumps(event))
+                  return {
+                      'statusCode': 200,
+                      'headers': {'Content-Type': 'application/json'},
+                      'body': json.dumps({'message': 'Request logged successfully'})
+                  }
+              except Exception as e:
+                  return {
+                      'statusCode': 500,
+                      'body': json.dumps({'error': str(e)})
+                  }
 
-              return {
-                  'statusCode': 200,
-                  'headers': {'Content-Type': 'application/json'},
-                  'body': json.dumps({'message': 'Request logged successfully'})
-              }
-      Environment:
-        Variables:
-          AUDIT_BUCKET: !Sub "${AuditBucketName}-${AWS::AccountId}-${AWS::Region}"
+  ################################################
+  # API Gateway (public) + integration to Lambda
+  ################################################
 
-  ### API Gateway
   ApiGatewayRestApi:
     Type: AWS::ApiGateway::RestApi
     Properties:
@@ -112,7 +292,7 @@ Resources:
     Properties:
       RestApiId: !Ref ApiGatewayRestApi
       ParentId: !GetAtt ApiGatewayRestApi.RootResourceId
-      PathPart: "chat"
+      PathPart: chat
 
   ApiGatewayMethod:
     Type: AWS::ApiGateway::Method
@@ -124,8 +304,7 @@ Resources:
       Integration:
         Type: AWS_PROXY
         IntegrationHttpMethod: POST
-        Uri: !Sub
-          arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${APILambdaFunction.Arn}/invocations
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${APILambdaFunction.Arn}/invocations
 
   ApiGatewayDeployment:
     Type: AWS::ApiGateway::Deployment
@@ -134,22 +313,46 @@ Resources:
       RestApiId: !Ref ApiGatewayRestApi
       StageName: !Ref ApiStageName
 
-  ### Lambda Permission for API Gateway
-  LambdaPermission:
+  LambdaInvokePermission:
     Type: AWS::Lambda::Permission
     Properties:
       Action: lambda:InvokeFunction
       FunctionName: !Ref APILambdaFunction
       Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGatewayRestApi}/*/POST/chat
 
 Outputs:
   ApiInvokeURL:
     Description: "Invoke URL for the API Gateway"
     Value: !Sub "https://${ApiGatewayRestApi}.execute-api.${AWS::Region}.amazonaws.com/${ApiStageName}/chat"
 
+  VpcId:
+    Description: "VPC Id"
+    Value: !Ref VPC
+
+  PublicSubnetId:
+    Description: "Public Subnet Id"
+    Value: !Ref PublicSubnet
+
+  PrivateSubnetId:
+    Description: "Private Subnet Id"
+    Value: !Ref PrivateSubnet
+
+  NatGatewayId:
+    Description: "NAT Gateway Id"
+    Value: !Ref NatGateway
+
+  NatEIP:
+    Description: "NAT Elastic IP"
+    Value: !Ref NatEIP
+
   AuditBucketArn:
     Description: "ARN of the S3 audit bucket"
     Value: !GetAtt AuditBucket.Arn
+
+  AuditBucketNameOut:
+    Description: "Name of the S3 audit bucket"
+    Value: !Sub "${AuditBucketName}-${AWS::AccountId}-${AWS::Region}"
 
   LambdaFunctionArn:
     Description: "ARN of the Lambda function"
