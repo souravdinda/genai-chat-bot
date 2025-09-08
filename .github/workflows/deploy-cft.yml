@@ -35,4 +35,4 @@ jobs:
         run: |
           aws cloudformation describe-stacks \
             --stack-name genai-chat-bot \
-            --query "Stacks[0].Outputs"
+            --query "Stacks[0]"
