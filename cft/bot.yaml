@@ -45,7 +45,7 @@ Resources:
   NetworkingStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: networking.yaml
+      TemplateURL: https://henry-sourav-workspace.s3.amazonaws.com/networking.yml
       Parameters:
         ProjectName: !Ref ProjectName
         VPCCidr: !Ref VPCCidr
