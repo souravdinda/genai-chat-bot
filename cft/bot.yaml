@@ -349,6 +349,10 @@ Resources:
                 - Utterance: "How are you?"
               FulfillmentCodeHook:
                 Enabled: true
+            - Name: FallbackIntent
+              Description: "Handles unrecognized utterances"
+              ParentIntentSignature: AMAZON.FallbackIntent
+
 
 
 Outputs:
