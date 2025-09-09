@@ -20,7 +20,7 @@ Parameters:
       - python3.11
       - nodejs16.x
       - nodejs18.x
-    Description: Lambda runtime environment.
+    Description: Lambda runtime environment (Python or Node.js).
 
   ApiName:
     Type: String
@@ -30,12 +30,12 @@ Parameters:
   ApiStageName:
     Type: String
     Default: dev
-    Description: Deployment stage name for API Gateway.
+    Description: Deployment stage name for API Gateway (e.g., dev, prod).
 
   AuditBucketName:
     Type: String
     Default: audit-logs-bucket
-    Description: Base name for the S3 bucket to store audit logs.
+    Description: Base name for the S3 bucket to store audit logs (suffix added for uniqueness).
 
   InputContentBucketBase:
     Type: String
@@ -494,19 +494,13 @@ Resources:
         IntegrationHttpMethod: POST
         Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${APILambdaFunction.Arn}/invocations
 
+  # Note: ApiGatewayDeployment does NOT support Tags -> removed Tags property here
   ApiGatewayDeployment:
     Type: AWS::ApiGateway::Deployment
     DependsOn: ApiGatewayMethod
     Properties:
       RestApiId: !Ref ApiGatewayRestApi
       StageName: !Ref ApiStageName
-      Tags:
-        - Key: Project
-          Value: genai-chat-bot
-        - Key: Stack
-          Value: !Ref AWS::StackName
-        - Key: Name
-          Value: !Sub "${AWS::StackName}-deployment"
 
   LambdaInvokePermission:
     Type: AWS::Lambda::Permission
@@ -518,6 +512,7 @@ Resources:
 
   ####################
   # Lex Bot
+  # Note: AWS::Lex::Bot does not accept Tags property in CFN resource body -> removed Tags
   ####################
   LexBot:
     Type: AWS::Lex::Bot
@@ -545,13 +540,6 @@ Resources:
             - Name: FallbackIntent
               Description: "Handles unrecognized utterances"
               ParentIntentSignature: AMAZON.FallbackIntent
-      Tags:
-        - Key: Project
-          Value: genai-chat-bot
-        - Key: Stack
-          Value: !Ref AWS::StackName
-        - Key: Name
-          Value: !Sub "${AWS::StackName}-lex-bot"
 
   LambdaPermissionForLex:
     Type: AWS::Lambda::Permission
@@ -599,6 +587,7 @@ Resources:
 
   ####################
   # Bedrock Knowledge Base (minimal)
+  # Bedrock Tags expect a JSON object (map) — use mapping here
   ####################
   BedrockKnowledgeBase:
     Type: AWS::Bedrock::KnowledgeBase
@@ -609,13 +598,7 @@ Resources:
       KnowledgeBaseConfiguration:
         KendraKnowledgeBaseConfiguration:
           IndexId: !Ref KendraIndex
-      Tags:
-        - Key: Project
-          Value: genai-chat-bot
-        - Key: Stack
-          Value: !Ref AWS::StackName
-        - Key: Name
-          Value: !Sub "${AWS::StackName}-bedrock-kb"
+
 
 Outputs:
   ApiInvokeURL:
