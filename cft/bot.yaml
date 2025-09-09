@@ -49,6 +49,11 @@ Parameters:
     Type: String
     Default: 10.0.2.0/24
     Description: Private subnet CIDR (for Lambda).
+  
+  BotName:
+    Type: String
+    Default: GenAIChatBot
+
 
 Resources:
 
@@ -320,6 +325,35 @@ Resources:
       FunctionName: !Ref APILambdaFunction
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGatewayRestApi}/*/POST/chat
+  
+  LexBot:
+    Type: AWS::Lex::Bot
+    Properties:
+      Name: !Ref BotName
+      RoleArn: !GetAtt LambdaExecutionRole.Arn
+      DataPrivacy:
+        ChildDirected: false
+      IdleSessionTTLInSeconds: 300
+      Description: "Lex bot integrated with Lambda for GenAI Chat"
+      BotLocales:
+        - LocaleId: en_US
+          NluConfidenceThreshold: 0.40
+          VoiceSettings:
+            VoiceId: Joanna
+          Intents:
+            - Name: ChatIntent
+              Description: "Sample intent for chat"
+              SampleUtterances:
+                - Utterance: "Hello"
+                - Utterance: "Hi"
+                - Utterance: "How are you?"
+              FulfillmentCodeHook:
+                Enabled: true
+            - Name: FallbackIntent
+              Description: "Handles unrecognized utterances"
+              ParentIntentSignature: AMAZON.FallbackIntent
+
+
 
 Outputs:
   ApiInvokeURL:
