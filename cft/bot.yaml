@@ -326,7 +326,6 @@ Resources:
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGatewayRestApi}/*/POST/chat
   
-  ### Amazon Lex Bot
   LexBot:
     Type: AWS::Lex::Bot
     Properties:
@@ -341,6 +340,16 @@ Resources:
           NluConfidenceThreshold: 0.40
           VoiceSettings:
             VoiceId: Joanna
+          Intents:
+            - Name: ChatIntent
+              Description: "Sample intent for chat"
+              SampleUtterances:
+                - Utterance: "Hello"
+                - Utterance: "Hi"
+                - Utterance: "How are you?"
+              FulfillmentCodeHook:
+                Enabled: true
+
 
 Outputs:
   ApiInvokeURL:
