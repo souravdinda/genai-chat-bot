@@ -234,6 +234,11 @@ Resources:
       BucketName: !Sub "${AuditBucketName}-${AWS::AccountId}-${AWS::Region}"
       VersioningConfiguration:
         Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
       Tags:
         - Key: Project
           Value: genai-chat-bot
@@ -249,6 +254,11 @@ Resources:
       BucketName: !Sub "${InputContentBucketBase}-${AWS::AccountId}-${AWS::Region}"
       VersioningConfiguration:
         Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
       Tags:
         - Key: Project
           Value: genai-chat-bot
@@ -281,14 +291,17 @@ Resources:
             Statement:
               - Effect: Allow
                 Action:
-                  - s3:PutObject
-                  - s3:GetObject
                   - s3:ListBucket
                 Resource:
-                  - !Sub "arn:aws:s3:::${AuditBucketName}-${AWS::AccountId}-${AWS::Region}"
-                  - !Sub "arn:aws:s3:::${AuditBucketName}-${AWS::AccountId}-${AWS::Region}/*"
-                  - !Sub "arn:aws:s3:::${InputContentBucketBase}-${AWS::AccountId}-${AWS::Region}"
-                  - !Sub "arn:aws:s3:::${InputContentBucketBase}-${AWS::AccountId}-${AWS::Region}/*"
+                  - !GetAtt AuditBucket.Arn
+                  - !GetAtt InputContentBucket.Arn
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource:
+                  - !Join [ "", [ !GetAtt AuditBucket.Arn, "/*" ] ]
+                  - !Join [ "", [ !GetAtt InputContentBucket.Arn, "/*" ] ]
               - Effect: Allow
                 Action:
                   - logs:CreateLogGroup
@@ -344,8 +357,8 @@ Resources:
                   - s3:GetObject
                   - s3:ListBucket
                 Resource:
-                  - !Sub "arn:aws:s3:::${InputContentBucketBase}-${AWS::AccountId}-${AWS::Region}"
-                  - !Sub "arn:aws:s3:::${InputContentBucketBase}-${AWS::AccountId}-${AWS::Region}/*"
+                  - !GetAtt InputContentBucket.Arn
+                  - !Join [ "", [ !GetAtt InputContentBucket.Arn, "/*" ] ]
       Tags:
         - Key: Project
           Value: genai-chat-bot
@@ -374,7 +387,7 @@ Resources:
           Value: !Sub "${AWS::StackName}-bedrock-role"
 
   ####################
-  # Lambda
+  # Lambda (main API Lambda - kept inline per your request)
   ####################
   APILambdaFunction:
     Type: AWS::Lambda::Function
@@ -494,7 +507,6 @@ Resources:
         IntegrationHttpMethod: POST
         Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${APILambdaFunction.Arn}/invocations
 
-  # Note: ApiGatewayDeployment does NOT support Tags -> removed Tags property here
   ApiGatewayDeployment:
     Type: AWS::ApiGateway::Deployment
     DependsOn: ApiGatewayMethod
@@ -512,7 +524,7 @@ Resources:
 
   ####################
   # Lex Bot
-  # Note: AWS::Lex::Bot does not accept Tags property in CFN resource body -> removed Tags
+  # Note: AWS::Lex::Bot does not accept Tags property in CFN resource body for some versions
   ####################
   LexBot:
     Type: AWS::Lex::Bot
@@ -586,19 +598,130 @@ Resources:
           Value: !Sub "${AWS::StackName}-kendra-datasource"
 
   ####################
-  # Bedrock Knowledge Base (minimal)
-  # Bedrock Tags expect a JSON object (map) — use mapping here
+  # Bedrock Knowledge Base (fixed) + Waiter custom resource
   ####################
+  # IAM role for the Kendra waiter lambda
+  KendraWaiterLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AWS::StackName}-kendra-waiter-role"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: KendraWaiterPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - kendra:DescribeIndex
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: arn:aws:logs:*:*:*
+
+  # Waiter Lambda inline - polls DescribeIndex until ACTIVE
+  KendraIndexWaiterFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-kendra-index-waiter"
+      Runtime: python3.11
+      Handler: index.handler
+      Role: !GetAtt KendraWaiterLambdaRole.Arn
+      Timeout: 900
+      MemorySize: 128
+      Code:
+        ZipFile: |
+          import json
+          import time
+          import urllib.request
+          import boto3
+
+          kendra = boto3.client('kendra')
+
+          def send_response(event, context, status, reason=None, physical_resource_id=None, data=None):
+              response_body = json.dumps({
+                  'Status': status,
+                  'Reason': reason or f'See the details in CloudWatch Log Stream: {context.log_stream_name}',
+                  'PhysicalResourceId': physical_resource_id or context.log_stream_name,
+                  'StackId': event.get('StackId'),
+                  'RequestId': event.get('RequestId'),
+                  'LogicalResourceId': event.get('LogicalResourceId'),
+                  'Data': data or {}
+              }).encode('utf-8')
+
+              req = urllib.request.Request(event['ResponseURL'], data=response_body, method='PUT')
+              req.add_header('Content-Type', '')
+              req.add_header('Content-Length', str(len(response_body)))
+              try:
+                  with urllib.request.urlopen(req) as f:
+                      pass
+              except Exception as e:
+                  print("Failed sending response:", e)
+
+          def wait_for_active(index_id, timeout_seconds=600, poll_interval=5):
+              start = time.time()
+              while True:
+                  resp = kendra.describe_index(Id=index_id)
+                  status = resp.get('Status')
+                  if status == 'ACTIVE':
+                      return True, resp
+                  if status == 'FAILED':
+                      # Kendra may return an ErrorMessage or ErrorCode
+                      return False, resp.get('ErrorMessage', 'Index creation failed')
+                  if time.time() - start > timeout_seconds:
+                      return False, f"Timeout waiting for index {index_id} to become ACTIVE"
+                  time.sleep(poll_interval)
+
+          def handler(event, context):
+              request_type = event.get('RequestType')
+              props = event.get('ResourceProperties', {})
+              index_id = props.get('IndexId')
+              timeout = int(props.get('TimeoutSeconds', 600))
+              try:
+                  if request_type in ('Create', 'Update'):
+                      ok, info = wait_for_active(index_id, timeout_seconds=timeout)
+                      if ok:
+                          send_response(event, context, 'SUCCESS', data={'IndexStatus': 'ACTIVE'})
+                      else:
+                          send_response(event, context, 'FAILED', reason=str(info))
+                  elif request_type == 'Delete':
+                      send_response(event, context, 'SUCCESS')
+                  else:
+                      send_response(event, context, 'FAILED', reason='Unknown RequestType')
+              except Exception as e:
+                  send_response(event, context, 'FAILED', reason=str(e))
+
+  # Custom resource that waits for Kendra index to become ACTIVE
+  WaitForKendraIndex:
+    Type: Custom::KendraIndexReady
+    Properties:
+      ServiceToken: !GetAtt KendraIndexWaiterFunction.Arn
+      IndexId: !Ref KendraIndex
+      TimeoutSeconds: 600
+
+  # Bedrock KnowledgeBase depends on the waiter custom resource
   BedrockKnowledgeBase:
     Type: AWS::Bedrock::KnowledgeBase
+    DependsOn: WaitForKendraIndex
     Properties:
       Name: !Sub "${AWS::StackName}-kb"
       RoleArn: !GetAtt BedrockServiceRole.Arn
       Description: "Knowledge base backed by Kendra"
       KnowledgeBaseConfiguration:
+        Type: KENDRA
         KendraKnowledgeBaseConfiguration:
-          IndexId: !Ref KendraIndex
-
+          KendraIndexArn: !Sub "arn:aws:kendra:${AWS::Region}:${AWS::AccountId}:index/${KendraIndex}"
 
 Outputs:
   ApiInvokeURL:
