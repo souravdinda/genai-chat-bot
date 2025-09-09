@@ -376,6 +376,28 @@ Resources:
             Principal:
               Service: bedrock.amazonaws.com
             Action: sts:AssumeRole
+      Policies:
+        - PolicyName: BedrockKendraAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - kendra:DescribeIndex
+                  - kendra:Query
+                  - kendra:ListIndices
+                Resource:
+                  - !Sub "arn:aws:kendra:${AWS::Region}:${AWS::AccountId}:index/${KendraIndex}"
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt InputContentBucket.Arn
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource:
+                  - !Join ["", [ !GetAtt InputContentBucket.Arn, "/*" ]]
       Tags:
         - Key: Project
           Value: genai-chat-bot
