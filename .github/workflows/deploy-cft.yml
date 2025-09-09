@@ -27,12 +27,12 @@ jobs:
         run: |
           aws cloudformation deploy \
           --template-file ./cft/bot.yaml \
-          --stack-name genai-chat-bot \
+          --stack-name genai-chat-bot1 \
           --capabilities CAPABILITY_NAMED_IAM \
           --s3-bucket henry-sourav-workspace
 
       - name: Show Stack Outputs
         run: |
           aws cloudformation describe-stacks \
-            --stack-name genai-chat-bot \
+            --stack-name genai-chat-bot1 \
             --query "Stacks[0]"
