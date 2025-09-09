@@ -1,401 +1,118 @@
-AWSTemplateFormatVersion: '2010-09-09'
-Description: >
-  genai-chat-bot — VPC + NAT + Lambda (in private subnet) + API Gateway (public) + S3 audit bucket.
-  Lambda will run in the private subnet and use NAT Gateway in the public subnet for outbound access (to S3).
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Parent stack for GenAI Chat Bot using Nested Stacks
 
 Parameters:
+  ProjectName:
+    Type: String
+    Default: genai-chat-bot
+  # VPC Parameters
+  VPCCidr:
+    Type: String
+    Default: 10.0.0.0/16
+  PublicSubnet1Cidr:
+    Type: String
+    Default: 10.0.1.0/24
+  PublicSubnet2Cidr:
+    Type: String
+    Default: 10.0.2.0/24
+  PrivateSubnet1Cidr:
+    Type: String
+    Default: 10.0.3.0/24
+  PrivateSubnet2Cidr:
+    Type: String
+    Default: 10.0.4.0/24
+
   LambdaFunctionName:
     Type: String
-    Default: genai-chat-lambda
-    Description: Name of the Lambda function.
-
+    Default: api-lambda
   LambdaRuntime:
     Type: String
     Default: python3.11
-    AllowedValues:
-      - python3.9
-      - python3.10
-      - python3.11
-      - nodejs16.x
-      - nodejs18.x
-    Description: Lambda runtime environment.
-
   ApiName:
     Type: String
-    Default: genai-chat-api
-    Description: Name of the API Gateway REST API.
-
+    Default: chat-api
   ApiStageName:
     Type: String
     Default: dev
-    Description: Deployment stage name for API Gateway.
-
   AuditBucketName:
     Type: String
     Default: audit-logs-bucket
-    Description: Base name for the S3 bucket to store audit logs.
-
-  VpcCidr:
-    Type: String
-    Default: 10.0.0.0/16
-    Description: VPC CIDR block.
-
-  PublicSubnetCidr:
-    Type: String
-    Default: 10.0.1.0/24
-    Description: Public subnet CIDR (for NAT gateway).
-
-  PrivateSubnetCidr:
-    Type: String
-    Default: 10.0.2.0/24
-    Description: Private subnet CIDR (for Lambda).
-  
-  BotName:
+  LexBotName:
     Type: String
     Default: GenAIChatBot
 
-
 Resources:
-
-  ################################################
-  # Networking: VPC, Subnets, IGW, NAT, Routes
-  ################################################
-
-  VPC:
-    Type: AWS::EC2::VPC
+  NetworkingStack:
+    Type: AWS::CloudFormation::Stack
     Properties:
-      CidrBlock: !Ref VpcCidr
-      EnableDnsSupport: true
-      EnableDnsHostnames: true
-      Tags:
-        - Key: Name
-          Value: !Sub "${AWS::StackName}-vpc"
+      TemplateURL: networking.yaml
+      Parameters:
+        ProjectName: !Ref ProjectName
+        VPCCidr: !Ref VPCCidr
+        PublicSubnet1Cidr: !Ref PublicSubnet1Cidr
+        PublicSubnet2Cidr: !Ref PublicSubnet2Cidr
+        PrivateSubnet1Cidr: !Ref PrivateSubnet1Cidr
+        PrivateSubnet2Cidr: !Ref PrivateSubnet2Cidr
 
-  PublicSubnet:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref VPC
-      CidrBlock: !Ref PublicSubnetCidr
-      MapPublicIpOnLaunch: true
-      AvailabilityZone: !Select [ 0, !GetAZs '' ]
-      Tags:
-        - Key: Name
-          Value: !Sub "${AWS::StackName}-public-subnet"
+  # S3Stack:
+  #   Type: AWS::CloudFormation::Stack
+  #   Properties:
+  #     TemplateURL: s3.yml
+  #     Parameters:
+  #       AuditBucketName: !Ref AuditBucketName
 
-  PrivateSubnet:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref VPC
-      CidrBlock: !Ref PrivateSubnetCidr
-      MapPublicIpOnLaunch: false
-      AvailabilityZone: !Select [ 0, !GetAZs '' ]
-      Tags:
-        - Key: Name
-          Value: !Sub "${AWS::StackName}-private-subnet"
+  # IAMStack:
+  #   Type: AWS::CloudFormation::Stack
+  #   Properties:
+  #     TemplateURL: iam.yml
+  #     Parameters:
+  #       ProjectName: !Ref ProjectName
+  #       AuditBucketArn: !GetAtt S3Stack.Outputs.AuditBucketArn
 
-  InternetGateway:
-    Type: AWS::EC2::InternetGateway
-    Properties:
-      Tags:
-        - Key: Name
-          Value: !Sub "${AWS::StackName}-igw"
+  # LambdaStack:
+  #   Type: AWS::CloudFormation::Stack
+  #   Properties:
+  #     TemplateURL: lambda.yml
+  #     Parameters:
+  #       LambdaFunctionName: !Ref LambdaFunctionName
+  #       LambdaRuntime: !Ref LambdaRuntime
+  #       LambdaRoleArn: !GetAtt IAMStack.Outputs.LambdaRoleArn
+  #       AuditBucketName: !GetAtt S3Stack.Outputs.AuditBucketName
+  #       VPCId: !GetAtt NetworkingStack.Outputs.VPCId
+  #       SubnetIds: !GetAtt NetworkingStack.Outputs.PrivateSubnetIds
+  #       SecurityGroupId: !GetAtt NetworkingStack.Outputs.LambdaSecurityGroupId
 
-  AttachInternetGateway:
-    Type: AWS::EC2::VPCGatewayAttachment
-    Properties:
-      VpcId: !Ref VPC
-      InternetGatewayId: !Ref InternetGateway
+  # ApiGatewayStack:
+  #   Type: AWS::CloudFormation::Stack
+  #   Properties:
+  #     TemplateURL: apigateway.yml
+  #     Parameters:
+  #       ApiName: !Ref ApiName
+  #       ApiStageName: !Ref ApiStageName
+  #       LambdaFunctionArn: !GetAtt LambdaStack.Outputs.LambdaFunctionArn
 
-  NatEIP:
-    Type: AWS::EC2::EIP
-    Properties:
-      Domain: vpc
-
-  NatGateway:
-    Type: AWS::EC2::NatGateway
-    DependsOn: AttachInternetGateway
-    Properties:
-      AllocationId: !GetAtt NatEIP.AllocationId
-      SubnetId: !Ref PublicSubnet
-      Tags:
-        - Key: Name
-          Value: !Sub "${AWS::StackName}-natgw"
-
-  PublicRouteTable:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      VpcId: !Ref VPC
-      Tags:
-        - Key: Name
-          Value: !Sub "${AWS::StackName}-public-rt"
-
-  PublicRoute:
-    Type: AWS::EC2::Route
-    DependsOn: AttachInternetGateway
-    Properties:
-      RouteTableId: !Ref PublicRouteTable
-      DestinationCidrBlock: 0.0.0.0/0
-      GatewayId: !Ref InternetGateway
-
-  PublicSubnetRouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId: !Ref PublicSubnet
-      RouteTableId: !Ref PublicRouteTable
-
-  PrivateRouteTable:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      VpcId: !Ref VPC
-      Tags:
-        - Key: Name
-          Value: !Sub "${AWS::StackName}-private-rt"
-
-  PrivateRoute:
-    Type: AWS::EC2::Route
-    Properties:
-      RouteTableId: !Ref PrivateRouteTable
-      DestinationCidrBlock: 0.0.0.0/0
-      NatGatewayId: !Ref NatGateway
-
-  PrivateSubnetRouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId: !Ref PrivateSubnet
-      RouteTableId: !Ref PrivateRouteTable
-
-  ################################################
-  # Security Group for Lambda
-  ################################################
-
-  LambdaSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Security group for Lambda in private subnet
-      VpcId: !Ref VPC
-      SecurityGroupIngress: []   # no inbound rules (Lambda initiates outbound)
-      SecurityGroupEgress:
-        - IpProtocol: -1
-          CidrIp: 0.0.0.0/0
-      Tags:
-        - Key: Name
-          Value: !Sub "${AWS::StackName}-lambda-sg"
-
-  ################################################
-  # S3 Audit Bucket (unique name)
-  ################################################
-
-  AuditBucket:
-    Type: AWS::S3::Bucket
-    DeletionPolicy: Retain
-    Properties:
-      BucketName: !Sub "${AuditBucketName}-${AWS::AccountId}-${AWS::Region}"
-      VersioningConfiguration:
-        Status: Enabled
-      Tags:
-        - Key: Name
-          Value: !Sub "${AWS::StackName}-audit-bucket"
-
-  ################################################
-  # IAM Role for Lambda
-  ################################################
-
-  LambdaExecutionRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: !Sub "${AWS::StackName}-lambda-role"
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service:
-                - lambda.amazonaws.com
-            Action:
-              - sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
-      Policies:
-        - PolicyName: AuditS3Policy
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - s3:PutObject
-                  - s3:GetObject
-                  - s3:ListBucket
-                Resource:
-                  - !Sub "arn:aws:s3:::${AuditBucketName}-${AWS::AccountId}-${AWS::Region}"
-                  - !Sub "arn:aws:s3:::${AuditBucketName}-${AWS::AccountId}-${AWS::Region}/*"
-              - Effect: Allow
-                Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                Resource: arn:aws:logs:*:*:*
-
-  ################################################
-  # Lambda Function (in private subnet)
-  ################################################
-
-  APILambdaFunction:
-    Type: AWS::Lambda::Function
-    Properties:
-      FunctionName: !Ref LambdaFunctionName
-      Runtime: !Ref LambdaRuntime
-      Handler: index.lambda_handler
-      Role: !GetAtt LambdaExecutionRole.Arn
-      Timeout: 60
-      MemorySize: 512
-      VpcConfig:
-        SecurityGroupIds:
-          - !Ref LambdaSecurityGroup
-        SubnetIds:
-          - !Ref PrivateSubnet
-      Environment:
-        Variables:
-          AUDIT_BUCKET: !Sub "${AuditBucketName}-${AWS::AccountId}-${AWS::Region}"
-      Code:
-        ZipFile: |
-          import json
-          import boto3
-          import os
-          s3 = boto3.client('s3')
-          bucket_name = os.environ.get('AUDIT_BUCKET')
-
-          def lambda_handler(event, context):
-              try:
-                  key = f"audit-{context.aws_request_id}.json"
-                  s3.put_object(Bucket=bucket_name, Key=key, Body=json.dumps(event))
-                  return {
-                      'statusCode': 200,
-                      'headers': {'Content-Type': 'application/json'},
-                      'body': json.dumps({'message': 'Request logged successfully'})
-                  }
-              except Exception as e:
-                  return {
-                      'statusCode': 500,
-                      'body': json.dumps({'error': str(e)})
-                  }
-
-  ################################################
-  # API Gateway (public) + integration to Lambda
-  ################################################
-
-  ApiGatewayRestApi:
-    Type: AWS::ApiGateway::RestApi
-    Properties:
-      Name: !Ref ApiName
-      EndpointConfiguration:
-        Types:
-          - REGIONAL
-
-  ApiGatewayResource:
-    Type: AWS::ApiGateway::Resource
-    Properties:
-      RestApiId: !Ref ApiGatewayRestApi
-      ParentId: !GetAtt ApiGatewayRestApi.RootResourceId
-      PathPart: chat
-
-  ApiGatewayMethod:
-    Type: AWS::ApiGateway::Method
-    Properties:
-      RestApiId: !Ref ApiGatewayRestApi
-      ResourceId: !Ref ApiGatewayResource
-      HttpMethod: POST
-      AuthorizationType: NONE
-      Integration:
-        Type: AWS_PROXY
-        IntegrationHttpMethod: POST
-        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${APILambdaFunction.Arn}/invocations
-
-  ApiGatewayDeployment:
-    Type: AWS::ApiGateway::Deployment
-    DependsOn: ApiGatewayMethod
-    Properties:
-      RestApiId: !Ref ApiGatewayRestApi
-      StageName: !Ref ApiStageName
-
-  LambdaInvokePermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !Ref APILambdaFunction
-      Principal: apigateway.amazonaws.com
-      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGatewayRestApi}/*/POST/chat
-  
-  LexBot:
-    Type: AWS::Lex::Bot
-    Properties:
-      Name: !Ref BotName
-      RoleArn: !GetAtt LambdaExecutionRole.Arn
-      DataPrivacy:
-        ChildDirected: false
-      IdleSessionTTLInSeconds: 300
-      Description: "Lex bot integrated with Lambda for GenAI Chat"
-      BotLocales:
-        - LocaleId: en_US
-          NluConfidenceThreshold: 0.40
-          VoiceSettings:
-            VoiceId: Joanna
-          Intents:
-            - Name: ChatIntent
-              Description: "Sample intent for chat"
-              SampleUtterances:
-                - Utterance: "Hello"
-                - Utterance: "Hi"
-                - Utterance: "How are you?"
-              FulfillmentCodeHook:
-                Enabled: true
-            - Name: FallbackIntent
-              Description: "Handles unrecognized utterances"
-              ParentIntentSignature: AMAZON.FallbackIntent
-
-
+  # LexBotStack:
+  #   Type: AWS::CloudFormation::Stack
+  #   Properties:
+  #     TemplateURL: lexbot.yml
+  #     Parameters:
+  #       LexBotName: !Ref LexBotName
+  #       LambdaFunctionArn: !GetAtt LambdaStack.Outputs.LambdaFunctionArn
 
 Outputs:
-  ApiInvokeURL:
-    Description: "Invoke URL for the API Gateway"
-    Value: !Sub "https://${ApiGatewayRestApi}.execute-api.${AWS::Region}.amazonaws.com/${ApiStageName}/chat"
-
-  VpcId:
-    Description: "VPC Id"
-    Value: !Ref VPC
-
-  PublicSubnetId:
-    Description: "Public Subnet Id"
-    Value: !Ref PublicSubnet
-
-  PrivateSubnetId:
-    Description: "Private Subnet Id"
-    Value: !Ref PrivateSubnet
-
-  NatGatewayId:
-    Description: "NAT Gateway Id"
-    Value: !Ref NatGateway
-
-  NatEIP:
-    Description: "NAT Elastic IP"
-    Value: !Ref NatEIP
-
-  AuditBucketArn:
-    Description: "ARN of the S3 audit bucket"
-    Value: !GetAtt AuditBucket.Arn
-
-  AuditBucketNameOut:
-    Description: "Name of the S3 audit bucket"
-    Value: !Sub "${AuditBucketName}-${AWS::AccountId}-${AWS::Region}"
-
-  LambdaFunctionArn:
-    Description: "ARN of the Lambda function"
-    Value: !GetAtt APILambdaFunction.Arn
-
-  LambdaRoleArn:
-    Description: "ARN of the Lambda Execution Role"
-    Value: !GetAtt LambdaExecutionRole.Arn
-
-  ApiGatewayArn:
-    Description: "ARN of the API Gateway REST API"
-    Value: !Sub "arn:aws:apigateway:${AWS::Region}::/restapis/${ApiGatewayRestApi}"
+  VPCId:
+    Value: !GetAtt NetworkingStack.Outputs.VPCId
+  PrivateSubnetIds:
+    Value: !GetAtt NetworkingStack.Outputs.PrivateSubnetIds
+  # LambdaSecurityGroupId:
+  #   Value: !GetAtt NetworkingStack.Outputs.LambdaSecurityGroupId
+  # ApiInvokeURL:
+  #   Value: !GetAtt ApiGatewayStack.Outputs.ApiInvokeURL
+  # LambdaFunctionArn:
+  #   Value: !GetAtt LambdaStack.Outputs.LambdaFunctionArn
+  # LambdaRoleArn:
+  #   Value: !GetAtt IAMStack.Outputs.LambdaRoleArn
+  # AuditBucketArn:
+  #   Value: !GetAtt S3Stack.Outputs.AuditBucketArn
+  # LexBotId:
+  #   Value: !GetAtt LexBotStack.Outputs.LexBotId
