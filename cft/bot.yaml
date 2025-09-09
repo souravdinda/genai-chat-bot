@@ -1,7 +1,9 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  genai-chat-bot — VPC + NAT + Lambda (in private subnet) + API Gateway (public) + S3 audit bucket.
-  Lambda will run in the private subnet and use NAT Gateway in the public subnet for outbound access (to S3).
+  genai-chat-bot — Single consolidated template with consistent tagging (Project, Stack, Name).
+  VPC + NAT + Lambda (private) + API Gateway (public) + S3 audit bucket +
+  Input content S3 + Textract permissions + Kendra (index + datasource) +
+  Bedrock KnowledgeBase + Lex bot.
 
 Parameters:
   LambdaFunctionName:
@@ -35,32 +37,36 @@ Parameters:
     Default: audit-logs-bucket
     Description: Base name for the S3 bucket to store audit logs.
 
+  InputContentBucketBase:
+    Type: String
+    Default: input-content-bucket
+    Description: Base name for the S3 bucket to store documents for Kendra/Textract ingestion.
+
   VpcCidr:
     Type: String
     Default: 10.0.0.0/16
-    Description: VPC CIDR block.
+    Description: CIDR block for the VPC.
 
   PublicSubnetCidr:
     Type: String
     Default: 10.0.1.0/24
-    Description: Public subnet CIDR (for NAT gateway).
+    Description: CIDR block for the public subnet (used for NAT Gateway).
 
   PrivateSubnetCidr:
     Type: String
     Default: 10.0.2.0/24
-    Description: Private subnet CIDR (for Lambda).
-  
+    Description: CIDR block for the private subnet (used for Lambda).
+
   BotName:
     Type: String
     Default: GenAIChatBot
-
+    Description: Name of the Amazon Lex bot.
 
 Resources:
 
-  ################################################
-  # Networking: VPC, Subnets, IGW, NAT, Routes
-  ################################################
-
+  ####################
+  # Networking
+  ####################
   VPC:
     Type: AWS::EC2::VPC
     Properties:
@@ -68,6 +74,10 @@ Resources:
       EnableDnsSupport: true
       EnableDnsHostnames: true
       Tags:
+        - Key: Project
+          Value: genai-chat-bot
+        - Key: Stack
+          Value: !Ref AWS::StackName
         - Key: Name
           Value: !Sub "${AWS::StackName}-vpc"
 
@@ -79,6 +89,10 @@ Resources:
       MapPublicIpOnLaunch: true
       AvailabilityZone: !Select [ 0, !GetAZs '' ]
       Tags:
+        - Key: Project
+          Value: genai-chat-bot
+        - Key: Stack
+          Value: !Ref AWS::StackName
         - Key: Name
           Value: !Sub "${AWS::StackName}-public-subnet"
 
@@ -90,6 +104,10 @@ Resources:
       MapPublicIpOnLaunch: false
       AvailabilityZone: !Select [ 0, !GetAZs '' ]
       Tags:
+        - Key: Project
+          Value: genai-chat-bot
+        - Key: Stack
+          Value: !Ref AWS::StackName
         - Key: Name
           Value: !Sub "${AWS::StackName}-private-subnet"
 
@@ -97,6 +115,10 @@ Resources:
     Type: AWS::EC2::InternetGateway
     Properties:
       Tags:
+        - Key: Project
+          Value: genai-chat-bot
+        - Key: Stack
+          Value: !Ref AWS::StackName
         - Key: Name
           Value: !Sub "${AWS::StackName}-igw"
 
@@ -110,6 +132,13 @@ Resources:
     Type: AWS::EC2::EIP
     Properties:
       Domain: vpc
+      Tags:
+        - Key: Project
+          Value: genai-chat-bot
+        - Key: Stack
+          Value: !Ref AWS::StackName
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-nat-eip"
 
   NatGateway:
     Type: AWS::EC2::NatGateway
@@ -118,6 +147,10 @@ Resources:
       AllocationId: !GetAtt NatEIP.AllocationId
       SubnetId: !Ref PublicSubnet
       Tags:
+        - Key: Project
+          Value: genai-chat-bot
+        - Key: Stack
+          Value: !Ref AWS::StackName
         - Key: Name
           Value: !Sub "${AWS::StackName}-natgw"
 
@@ -126,6 +159,10 @@ Resources:
     Properties:
       VpcId: !Ref VPC
       Tags:
+        - Key: Project
+          Value: genai-chat-bot
+        - Key: Stack
+          Value: !Ref AWS::StackName
         - Key: Name
           Value: !Sub "${AWS::StackName}-public-rt"
 
@@ -148,6 +185,10 @@ Resources:
     Properties:
       VpcId: !Ref VPC
       Tags:
+        - Key: Project
+          Value: genai-chat-bot
+        - Key: Stack
+          Value: !Ref AWS::StackName
         - Key: Name
           Value: !Sub "${AWS::StackName}-private-rt"
 
@@ -164,27 +205,28 @@ Resources:
       SubnetId: !Ref PrivateSubnet
       RouteTableId: !Ref PrivateRouteTable
 
-  ################################################
-  # Security Group for Lambda
-  ################################################
-
+  ####################
+  # Security Group
+  ####################
   LambdaSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Security group for Lambda in private subnet
+      GroupDescription: Security group for Lambda
       VpcId: !Ref VPC
-      SecurityGroupIngress: []   # no inbound rules (Lambda initiates outbound)
       SecurityGroupEgress:
         - IpProtocol: -1
           CidrIp: 0.0.0.0/0
       Tags:
+        - Key: Project
+          Value: genai-chat-bot
+        - Key: Stack
+          Value: !Ref AWS::StackName
         - Key: Name
           Value: !Sub "${AWS::StackName}-lambda-sg"
 
-  ################################################
-  # S3 Audit Bucket (unique name)
-  ################################################
-
+  ####################
+  # S3 Buckets
+  ####################
   AuditBucket:
     Type: AWS::S3::Bucket
     DeletionPolicy: Retain
@@ -193,33 +235,49 @@ Resources:
       VersioningConfiguration:
         Status: Enabled
       Tags:
+        - Key: Project
+          Value: genai-chat-bot
+        - Key: Stack
+          Value: !Ref AWS::StackName
         - Key: Name
           Value: !Sub "${AWS::StackName}-audit-bucket"
 
-  ################################################
-  # IAM Role for Lambda
-  ################################################
+  InputContentBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    Properties:
+      BucketName: !Sub "${InputContentBucketBase}-${AWS::AccountId}-${AWS::Region}"
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+        - Key: Project
+          Value: genai-chat-bot
+        - Key: Stack
+          Value: !Ref AWS::StackName
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-input-content-bucket"
 
+  ####################
+  # IAM Roles
+  ####################
   LambdaExecutionRole:
     Type: AWS::IAM::Role
     Properties:
       RoleName: !Sub "${AWS::StackName}-lambda-role"
       AssumeRolePolicyDocument:
-        Version: '2012-10-17'
+        Version: "2012-10-17"
         Statement:
           - Effect: Allow
             Principal:
-              Service:
-                - lambda.amazonaws.com
-            Action:
-              - sts:AssumeRole
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
         - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
       Policies:
-        - PolicyName: AuditS3Policy
+        - PolicyName: GenAIAccessPolicy
           PolicyDocument:
-            Version: '2012-10-17'
+            Version: "2012-10-17"
             Statement:
               - Effect: Allow
                 Action:
@@ -229,17 +287,95 @@ Resources:
                 Resource:
                   - !Sub "arn:aws:s3:::${AuditBucketName}-${AWS::AccountId}-${AWS::Region}"
                   - !Sub "arn:aws:s3:::${AuditBucketName}-${AWS::AccountId}-${AWS::Region}/*"
+                  - !Sub "arn:aws:s3:::${InputContentBucketBase}-${AWS::AccountId}-${AWS::Region}"
+                  - !Sub "arn:aws:s3:::${InputContentBucketBase}-${AWS::AccountId}-${AWS::Region}/*"
               - Effect: Allow
                 Action:
                   - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource: arn:aws:logs:*:*:*
+              - Effect: Allow
+                Action:
+                  - textract:StartDocumentTextDetection
+                  - textract:GetDocumentTextDetection
+                  - textract:AnalyzeDocument
+                  - textract:StartDocumentAnalysis
+                  - textract:GetDocumentAnalysis
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - kendra:Query
+                  - kendra:BatchPutDocument
+                  - kendra:BatchDeleteDocument
+                  - kendra:DescribeIndex
+                  - kendra:ListIndices
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                Resource: "*"
+      Tags:
+        - Key: Project
+          Value: genai-chat-bot
+        - Key: Stack
+          Value: !Ref AWS::StackName
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-lambda-role"
 
-  ################################################
-  # Lambda Function (in private subnet)
-  ################################################
+  KendraServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AWS::StackName}-kendra-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: kendra.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: KendraAccessS3
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub "arn:aws:s3:::${InputContentBucketBase}-${AWS::AccountId}-${AWS::Region}"
+                  - !Sub "arn:aws:s3:::${InputContentBucketBase}-${AWS::AccountId}-${AWS::Region}/*"
+      Tags:
+        - Key: Project
+          Value: genai-chat-bot
+        - Key: Stack
+          Value: !Ref AWS::StackName
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-kendra-role"
 
+  BedrockServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AWS::StackName}-bedrock-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: bedrock.amazonaws.com
+            Action: sts:AssumeRole
+      Tags:
+        - Key: Project
+          Value: genai-chat-bot
+        - Key: Stack
+          Value: !Ref AWS::StackName
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-bedrock-role"
+
+  ####################
+  # Lambda
+  ####################
   APILambdaFunction:
     Type: AWS::Lambda::Function
     Properties:
@@ -247,50 +383,97 @@ Resources:
       Runtime: !Ref LambdaRuntime
       Handler: index.lambda_handler
       Role: !GetAtt LambdaExecutionRole.Arn
-      Timeout: 60
-      MemorySize: 512
+      Timeout: 120
+      MemorySize: 1024
       VpcConfig:
-        SecurityGroupIds:
-          - !Ref LambdaSecurityGroup
-        SubnetIds:
-          - !Ref PrivateSubnet
+        SecurityGroupIds: [!Ref LambdaSecurityGroup]
+        SubnetIds: [!Ref PrivateSubnet]
       Environment:
         Variables:
           AUDIT_BUCKET: !Sub "${AuditBucketName}-${AWS::AccountId}-${AWS::Region}"
+          INPUT_BUCKET: !Sub "${InputContentBucketBase}-${AWS::AccountId}-${AWS::Region}"
+          KENDRA_INDEX_ID: !Ref KendraIndex
       Code:
         ZipFile: |
-          import json
-          import boto3
-          import os
+          import json, boto3, os
           s3 = boto3.client('s3')
-          bucket_name = os.environ.get('AUDIT_BUCKET')
-
+          kendra = boto3.client('kendra')
+          try:
+              bedrock = boto3.client('bedrock-runtime')
+          except Exception:
+              bedrock = None
           def lambda_handler(event, context):
               try:
-                  key = f"audit-{context.aws_request_id}.json"
-                  s3.put_object(Bucket=bucket_name, Key=key, Body=json.dumps(event))
-                  return {
-                      'statusCode': 200,
-                      'headers': {'Content-Type': 'application/json'},
-                      'body': json.dumps({'message': 'Request logged successfully'})
-                  }
+                  s3.put_object(Bucket=os.environ['AUDIT_BUCKET'],
+                                Key=f"audit-{context.aws_request_id}.json",
+                                Body=json.dumps(event))
               except Exception as e:
+                  print("audit write failed:", e)
+              if 'httpMethod' in event:
+                  body = json.loads(event.get('body') or '{}')
+                  if body.get('service') == 'kendra':
+                      resp = kendra.query(IndexId=os.environ.get('KENDRA_INDEX_ID'), QueryText=body.get('query',''))
+                      return {'statusCode': 200, 'body': json.dumps(resp)}
+                  if body.get('service') == 'bedrock' and bedrock:
+                      res = bedrock.invoke_model(modelId="amazon.titan", contentType="application/json", accept="application/json", body=json.dumps({"input": body.get('prompt','')}))
+                      if 'body' in res:
+                          try:
+                              return {'statusCode': 200, 'body': res['body'].read().decode()}
+                          except:
+                              return {'statusCode': 200, 'body': json.dumps(res)}
+                      return {'statusCode': 200, 'body': json.dumps(res)}
+                  return {'statusCode': 200, 'body': json.dumps({"msg":"logged"})}
+              if 'sessionState' in event:
+                  user_text = event.get('inputTranscript','')
+                  kresp = kendra.query(IndexId=os.environ.get('KENDRA_INDEX_ID'), QueryText=user_text) if os.environ.get('KENDRA_INDEX_ID') else {}
+                  answer = None
+                  if isinstance(kresp, dict) and kresp.get('ResultItems'):
+                      top = kresp['ResultItems'][0]
+                      answer = top.get('DocumentExcerpt', {}).get('Text', 'I found something.')
+                  else:
+                      if bedrock:
+                          bed = bedrock.invoke_model(modelId="amazon.titan", contentType="application/json", accept="application/json", body=json.dumps({"input": user_text}))
+                          if 'body' in bed:
+                              try:
+                                  answer = bed['body'].read().decode()
+                              except:
+                                  answer = str(bed)
+                          else:
+                              answer = str(bed)
+                      else:
+                          answer = "Sorry, no model available."
                   return {
-                      'statusCode': 500,
-                      'body': json.dumps({'error': str(e)})
+                      "sessionState": {
+                          "dialogAction": {"type": "Close"},
+                          "intent": {"name": event['sessionState']['intent']['name'], "state": "Fulfilled"}
+                      },
+                      "messages": [{"contentType": "PlainText", "content": answer}]
                   }
+              return {'statusCode': 400, 'body': json.dumps({'error': 'Unknown event'})}
+      Tags:
+        - Key: Project
+          Value: genai-chat-bot
+        - Key: Stack
+          Value: !Ref AWS::StackName
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-lambda"
 
-  ################################################
-  # API Gateway (public) + integration to Lambda
-  ################################################
-
+  ####################
+  # API Gateway
+  ####################
   ApiGatewayRestApi:
     Type: AWS::ApiGateway::RestApi
     Properties:
       Name: !Ref ApiName
       EndpointConfiguration:
-        Types:
-          - REGIONAL
+        Types: [REGIONAL]
+      Tags:
+        - Key: Project
+          Value: genai-chat-bot
+        - Key: Stack
+          Value: !Ref AWS::StackName
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-api"
 
   ApiGatewayResource:
     Type: AWS::ApiGateway::Resource
@@ -317,6 +500,13 @@ Resources:
     Properties:
       RestApiId: !Ref ApiGatewayRestApi
       StageName: !Ref ApiStageName
+      Tags:
+        - Key: Project
+          Value: genai-chat-bot
+        - Key: Stack
+          Value: !Ref AWS::StackName
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-deployment"
 
   LambdaInvokePermission:
     Type: AWS::Lambda::Permission
@@ -325,7 +515,10 @@ Resources:
       FunctionName: !Ref APILambdaFunction
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGatewayRestApi}/*/POST/chat
-  
+
+  ####################
+  # Lex Bot
+  ####################
   LexBot:
     Type: AWS::Lex::Bot
     Properties:
@@ -352,8 +545,77 @@ Resources:
             - Name: FallbackIntent
               Description: "Handles unrecognized utterances"
               ParentIntentSignature: AMAZON.FallbackIntent
+      Tags:
+        - Key: Project
+          Value: genai-chat-bot
+        - Key: Stack
+          Value: !Ref AWS::StackName
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-lex-bot"
 
+  LambdaPermissionForLex:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref APILambdaFunction
+      Principal: lex.amazonaws.com
 
+  ####################
+  # Kendra
+  ####################
+  KendraIndex:
+    Type: AWS::Kendra::Index
+    Properties:
+      Name: !Sub "${AWS::StackName}-kendra-index"
+      RoleArn: !GetAtt KendraServiceRole.Arn
+      Edition: DEVELOPER_EDITION
+      Description: "Kendra index for genai-chat-bot"
+      Tags:
+        - Key: Project
+          Value: genai-chat-bot
+        - Key: Stack
+          Value: !Ref AWS::StackName
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-kendra-index"
+
+  KendraDataSource:
+    Type: AWS::Kendra::DataSource
+    Properties:
+      Name: !Sub "${AWS::StackName}-kendra-s3-ds"
+      IndexId: !Ref KendraIndex
+      Type: S3
+      DataSourceConfiguration:
+        S3Configuration:
+          BucketName: !Sub "${InputContentBucketBase}-${AWS::AccountId}-${AWS::Region}"
+      RoleArn: !GetAtt KendraServiceRole.Arn
+      Description: "S3 datasource for Kendra from InputContentBucket"
+      Tags:
+        - Key: Project
+          Value: genai-chat-bot
+        - Key: Stack
+          Value: !Ref AWS::StackName
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-kendra-datasource"
+
+  ####################
+  # Bedrock Knowledge Base (minimal)
+  ####################
+  BedrockKnowledgeBase:
+    Type: AWS::Bedrock::KnowledgeBase
+    Properties:
+      Name: !Sub "${AWS::StackName}-kb"
+      RoleArn: !GetAtt BedrockServiceRole.Arn
+      Description: "Knowledge base backed by Kendra"
+      KnowledgeBaseConfiguration:
+        KendraKnowledgeBaseConfiguration:
+          IndexId: !Ref KendraIndex
+      Tags:
+        - Key: Project
+          Value: genai-chat-bot
+        - Key: Stack
+          Value: !Ref AWS::StackName
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-bedrock-kb"
 
 Outputs:
   ApiInvokeURL:
@@ -387,6 +649,18 @@ Outputs:
   AuditBucketNameOut:
     Description: "Name of the S3 audit bucket"
     Value: !Sub "${AuditBucketName}-${AWS::AccountId}-${AWS::Region}"
+
+  InputContentBucketName:
+    Description: "Input content S3 bucket name"
+    Value: !Sub "${InputContentBucketBase}-${AWS::AccountId}-${AWS::Region}"
+
+  KendraIndexId:
+    Description: "Kendra Index Id"
+    Value: !Ref KendraIndex
+
+  BedrockKnowledgeBaseId:
+    Description: "Bedrock KnowledgeBase Id"
+    Value: !Ref BedrockKnowledgeBase
 
   LambdaFunctionArn:
     Description: "ARN of the Lambda function"
