@@ -1,4 +1,4 @@
-# **genai-chat-bot**
+# **Genai-Chat-Bot**
 
 ## ✅ Overview
 The **genai-chat-bot** project provisions a **secure, scalable architecture** using **AWS CloudFormation** to deploy:
