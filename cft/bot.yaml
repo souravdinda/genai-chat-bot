@@ -736,12 +736,12 @@ Resources:
   #                 send_response(event, context, 'FAILED', reason=str(e))
 
   # Custom resource that waits for Kendra index to become ACTIVE
-  WaitForKendraIndex:
-    Type: Custom::KendraIndexReady
-    Properties:
-      ServiceToken: !GetAtt KendraIndexWaiterFunction.Arn
-      IndexId: !Ref KendraIndex
-      TimeoutSeconds: 600
+  # WaitForKendraIndex:
+  #   Type: Custom::KendraIndexReady
+  #   Properties:
+  #     ServiceToken: !GetAtt KendraIndexWaiterFunction.Arn
+  #     IndexId: !Ref KendraIndex
+  #     TimeoutSeconds: 600
 
   # # Bedrock KnowledgeBase depends on the waiter custom resource
   # BedrockKnowledgeBase:
