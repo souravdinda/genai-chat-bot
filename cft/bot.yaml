@@ -735,7 +735,7 @@ Resources:
               except Exception as e:
                   send_response(event, context, 'FAILED', reason=str(e))
 
-  Custom resource that waits for Kendra index to become ACTIVE
+  #Custom resource that waits for Kendra index to become ACTIVE
   WaitForKendraIndex:
     Type: Custom::KendraIndexReady
     Properties:
