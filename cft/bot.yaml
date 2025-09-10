@@ -334,89 +334,89 @@ Resources:
         - Key: Name
           Value: !Sub "${AWS::StackName}-lambda-role"
 
-  KendraServiceRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: !Sub "${AWS::StackName}-kendra-role"
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: kendra.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: KendraAccessS3AndManage
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              # Allow Kendra to read from the input S3 bucket
-              - Effect: Allow
-                Action:
-                  - s3:GetObject
-                  - s3:ListBucket
-                Resource:
-                  - !GetAtt InputContentBucket.Arn
-                  - !Join [ "", [ !GetAtt InputContentBucket.Arn, "/*" ] ]
-              # Allow Kendra to ingest and manage documents in its index
-              - Effect: Allow
-                Action:
-                  - kendra:BatchPutDocument
-                  - kendra:BatchDeleteDocument
-                  - kendra:DescribeIndex
-                  - kendra:ListIndices
-                  - kendra:DescribeDataSource
-                  - kendra:ListDataSources
-                Resource: !Sub "arn:aws:kendra:${AWS::Region}:${AWS::AccountId}:index/${KendraIndex}"
-      Tags:
-        - Key: Project
-          Value: genai-chat-bot
-        - Key: Stack
-          Value: !Ref AWS::StackName
-        - Key: Name
-          Value: !Sub "${AWS::StackName}-kendra-role"
+  # KendraServiceRole:
+  #   Type: AWS::IAM::Role
+  #   Properties:
+  #     RoleName: !Sub "${AWS::StackName}-kendra-role"
+  #     AssumeRolePolicyDocument:
+  #       Version: "2012-10-17"
+  #       Statement:
+  #         - Effect: Allow
+  #           Principal:
+  #             Service: kendra.amazonaws.com
+  #           Action: sts:AssumeRole
+  #     Policies:
+  #       - PolicyName: KendraAccessS3AndManage
+  #         PolicyDocument:
+  #           Version: "2012-10-17"
+  #           Statement:
+  #             # Allow Kendra to read from the input S3 bucket
+  #             - Effect: Allow
+  #               Action:
+  #                 - s3:GetObject
+  #                 - s3:ListBucket
+  #               Resource:
+  #                 - !GetAtt InputContentBucket.Arn
+  #                 - !Join [ "", [ !GetAtt InputContentBucket.Arn, "/*" ] ]
+  #             # Allow Kendra to ingest and manage documents in its index
+  #             - Effect: Allow
+  #               Action:
+  #                 - kendra:BatchPutDocument
+  #                 - kendra:BatchDeleteDocument
+  #                 - kendra:DescribeIndex
+  #                 - kendra:ListIndices
+  #                 - kendra:DescribeDataSource
+  #                 - kendra:ListDataSources
+  #               Resource: !Sub "arn:aws:kendra:${AWS::Region}:${AWS::AccountId}:index/${KendraIndex}"
+  #     Tags:
+  #       - Key: Project
+  #         Value: genai-chat-bot
+  #       - Key: Stack
+  #         Value: !Ref AWS::StackName
+  #       - Key: Name
+  #         Value: !Sub "${AWS::StackName}-kendra-role"
 
 
-  BedrockServiceRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: !Sub "${AWS::StackName}-bedrock-role"
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: bedrock.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: BedrockKendraAccess
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action:
-                  - kendra:DescribeIndex
-                  - kendra:Query
-                  - kendra:ListIndices
-                Resource:
-                  - !Sub "arn:aws:kendra:${AWS::Region}:${AWS::AccountId}:index/${KendraIndex}"
-              - Effect: Allow
-                Action:
-                  - s3:ListBucket
-                Resource:
-                  - !GetAtt InputContentBucket.Arn
-              - Effect: Allow
-                Action:
-                  - s3:GetObject
-                Resource:
-                  - !Join ["", [ !GetAtt InputContentBucket.Arn, "/*" ]]
-      Tags:
-        - Key: Project
-          Value: genai-chat-bot
-        - Key: Stack
-          Value: !Ref AWS::StackName
-        - Key: Name
-          Value: !Sub "${AWS::StackName}-bedrock-role"
+  # BedrockServiceRole:
+  #   Type: AWS::IAM::Role
+  #   Properties:
+  #     RoleName: !Sub "${AWS::StackName}-bedrock-role"
+  #     AssumeRolePolicyDocument:
+  #       Version: "2012-10-17"
+  #       Statement:
+  #         - Effect: Allow
+  #           Principal:
+  #             Service: bedrock.amazonaws.com
+  #           Action: sts:AssumeRole
+  #     Policies:
+  #       - PolicyName: BedrockKendraAccess
+  #         PolicyDocument:
+  #           Version: "2012-10-17"
+  #           Statement:
+  #             - Effect: Allow
+  #               Action:
+  #                 - kendra:DescribeIndex
+  #                 - kendra:Query
+  #                 - kendra:ListIndices
+  #               Resource:
+  #                 - !Sub "arn:aws:kendra:${AWS::Region}:${AWS::AccountId}:index/${KendraIndex}"
+  #             - Effect: Allow
+  #               Action:
+  #                 - s3:ListBucket
+  #               Resource:
+  #                 - !GetAtt InputContentBucket.Arn
+  #             - Effect: Allow
+  #               Action:
+  #                 - s3:GetObject
+  #               Resource:
+  #                 - !Join ["", [ !GetAtt InputContentBucket.Arn, "/*" ]]
+  #     Tags:
+  #       - Key: Project
+  #         Value: genai-chat-bot
+  #       - Key: Stack
+  #         Value: !Ref AWS::StackName
+  #       - Key: Name
+  #         Value: !Sub "${AWS::StackName}-bedrock-role"
 
   ####################
   # Lambda (main API Lambda - kept inline per your request)
