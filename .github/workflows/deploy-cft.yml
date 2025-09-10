@@ -3,7 +3,7 @@ name: Deploy CloudFormation
 on:
   push:
     branches:
-      - "test-branch"
+      - "test-branch1"
 
 jobs:
   deploy:
