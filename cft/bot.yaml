@@ -600,7 +600,6 @@ Resources:
       Name: !Sub "${AWS::StackName}-kendra-index"
       RoleArn: !GetAtt KendraServiceRole.Arn
       Edition: ENTERPRISE_EDITION
-      Type: GEN_AI
       Description: "Kendra GenAI index for genai-chat-bot"
       Tags:
         - Key: Project
