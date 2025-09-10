@@ -746,7 +746,6 @@ Resources:
   # Bedrock KnowledgeBase depends on the waiter custom resource
   BedrockKnowledgeBase:
     Type: AWS::Bedrock::KnowledgeBase
-    DependsOn: WaitForKendraIndex
     Properties:
       Name: !Sub "${AWS::StackName}-kb"
       RoleArn: !GetAtt BedrockServiceRole.Arn
