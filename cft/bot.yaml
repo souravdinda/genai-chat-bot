@@ -346,10 +346,11 @@ Resources:
               Service: kendra.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: KendraAccessS3
+        - PolicyName: KendraAccessS3AndManage
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
+              # Allow Kendra to read from the input S3 bucket
               - Effect: Allow
                 Action:
                   - s3:GetObject
@@ -357,6 +358,16 @@ Resources:
                 Resource:
                   - !GetAtt InputContentBucket.Arn
                   - !Join [ "", [ !GetAtt InputContentBucket.Arn, "/*" ] ]
+              # Allow Kendra to ingest and manage documents in its index
+              - Effect: Allow
+                Action:
+                  - kendra:BatchPutDocument
+                  - kendra:BatchDeleteDocument
+                  - kendra:DescribeIndex
+                  - kendra:ListIndices
+                  - kendra:DescribeDataSource
+                  - kendra:ListDataSources
+                Resource: !Sub "arn:aws:kendra:${AWS::Region}:${AWS::AccountId}:index/${KendraIndex}"
       Tags:
         - Key: Project
           Value: genai-chat-bot
@@ -364,6 +375,7 @@ Resources:
           Value: !Ref AWS::StackName
         - Key: Name
           Value: !Sub "${AWS::StackName}-kendra-role"
+
 
   BedrockServiceRole:
     Type: AWS::IAM::Role
