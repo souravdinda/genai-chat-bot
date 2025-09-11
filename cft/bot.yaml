@@ -730,7 +730,7 @@ Resources:
       IndexId: !Ref KendraIndex
       TimeoutSeconds: 600
 
-  # Bedrock KnowledgeBase depends on the waiter custom resource
+  #  Bedrock KnowledgeBase depends on the waiter custom resource
   # BedrockKnowledgeBase:
   #   Type: AWS::Bedrock::KnowledgeBase
   #   DependsOn: WaitForKendraIndex
