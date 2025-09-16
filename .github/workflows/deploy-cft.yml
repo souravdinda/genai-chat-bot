@@ -11,6 +11,15 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
+      
+      - name: Set up Python (needed for SAM CLI)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install AWS SAM CLI
+        run: |
+          pip install aws-sam-cli
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -19,20 +28,8 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: "us-east-1"
 
-      - name: Upload CFT to S3
-        run: |
-          aws s3 cp ./cft s3://henry-sourav-workspace/ --recursive
+      - name: Build SAM App
+        run: sam build
 
-      - name: Deploy CloudFormation Stack
-        run: |
-          aws cloudformation deploy \
-          --template-file ./cft/bot.yaml \
-          --stack-name genai-chat-bot \
-          --capabilities CAPABILITY_NAMED_IAM \
-          --s3-bucket henry-sourav-workspace
-
-      - name: Show Stack Outputs
-        run: |
-          aws cloudformation describe-stacks \
-            --stack-name genai-chat-bot \
-            --query "Stacks[0]"
+      - name: Deploy SAM App
+        run: sam deploy --no-confirm-changeset --no-fail-on-empty-changeset --stack-name genai-chat-bot --capabilities CAPABILITY_IAM
