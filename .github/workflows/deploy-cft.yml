@@ -32,4 +32,11 @@ jobs:
         run: sam build
 
       - name: Deploy SAM App
-        run: sam deploy --no-confirm-changeset --no-fail-on-empty-changeset --stack-name genai-chat-bot --capabilities CAPABILITY_IAM
+        run: |
+          sam deploy \
+            --stack-name genai-chat-bot \
+            --capabilities CAPABILITY_IAM \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --s3-bucket henry-sourav-workspace
+
