@@ -475,6 +475,7 @@ Resources:
 
   KendraDataSource:
     Type: AWS::Kendra::DataSource
+    DependsOn: KendraIndex
     Properties:
       Name: !Sub "${AWS::StackName}-kendra-s3-ds"
       IndexId: !Ref KendraIndex
