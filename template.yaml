@@ -506,6 +506,15 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+      - PolicyName: KendraDescribeIndexPolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - kendra:DescribeIndex
+              Resource: !Sub "arn:aws:kendra:${AWS::Region}:${AWS::AccountId}:index/${KendraIndex}"
       Tags:
         - Key: Project
           Value: genai-chat-bot
