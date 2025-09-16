@@ -344,9 +344,15 @@ Resources:
               Action:
                 - kendra:DescribeIndex
                 - kendra:Query
+                - kendra:Retrieve
                 - kendra:ListIndices
-              Resource:
-                - !Sub "arn:aws:kendra:${AWS::Region}:${AWS::AccountId}:index/${KendraIndex}"
+                - kendra:ListDataSources
+                - kendra:DescribeDataSource
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - s3:*
+              Resource: "*"
       Tags:
         - Key: Project
           Value: genai-chat-bot
