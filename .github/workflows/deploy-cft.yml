@@ -35,7 +35,7 @@ jobs:
         run: |
           sam deploy \
             --stack-name genai-chat-bot \
-            --capabilities CAPABILITY_IAM \
+            --capabilities CAPABILITY_IAM  CAPABILITY_NAMED_IAM \
             --no-confirm-changeset \
             --no-fail-on-empty-changeset \
             --s3-bucket henry-sourav-workspace
