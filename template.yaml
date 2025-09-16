@@ -372,12 +372,9 @@ Resources:
             Method: post
             RestApiId: !Ref ApiGatewayRestApi
       Tags:
-        - Key: Project
-          Value: genai-chat-bot
-        - Key: Stack
-          Value: !Ref AWS::StackName
-        - Key: Name
-          Value: !Sub "${AWS::StackName}-lambda"
+        Project: genai-chat-bot
+        Stack: !Ref AWS::StackName
+        Name: !Sub "${AWS::StackName}-lambda"
 
   ####################
   # API Gateway
@@ -528,12 +525,10 @@ Resources:
       MemorySize: 128
       CodeUri: ./waiter/
       Tags:
-        - Key: Project
-          Value: genai-chat-bot
-        - Key: Stack
-          Value: !Ref AWS::StackName
-        - Key: Name
-          Value: !Sub "${AWS::StackName}-kendra-waiter-lambda"
+        Project: genai-chat-bot
+        Stack: !Ref AWS::StackName
+        Name: !Sub "${AWS::StackName}-lambda"
+
 
   WaitForKendraIndex:
     Type: Custom::KendraIndexReady
