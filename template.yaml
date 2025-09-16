@@ -476,7 +476,7 @@ Resources:
     Properties:
       Name: !Sub "${AWS::StackName}-kendra-index"
       RoleArn: !GetAtt KendraServiceRole.Arn
-      Edition: DEVELOPER_EDITION
+      Edition: GEN_AI_ENTERPRISE_EDITION
       Tags:
         - Key: Project
           Value: genai-chat-bot
