@@ -135,12 +135,6 @@ Resources:
               Resource: "*"
         - SNSPublishMessagePolicy:
             TopicName: !Ref TextractJobCompleteTopic
-      Events:
-        S3Trigger:
-          Type: S3
-          Properties:
-            Bucket: !Ref InputBucket
-            Events: s3:ObjectCreated:*
 
 Outputs:
   BucketName:
