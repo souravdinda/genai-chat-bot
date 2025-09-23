@@ -40,6 +40,7 @@ Resources:
   ## Lambda #1 (Triggered by EventBridge Rule #1)
   EventBridgeLambdaOne:
     Type: AWS::Serverless::Function
+    DependsOn: InputBucket
     Properties:
       CodeUri: lambdas/lambda_one/
       Handler: app.lambda_handler
@@ -67,6 +68,7 @@ Resources:
   ## Lambda #2 (Triggered by EventBridge Rule #2)
   EventBridgeLambdaTwo:
     Type: AWS::Serverless::Function
+    DependsOn: InputBucket
     Properties:
       CodeUri: lambdas/lambda_two/
       Handler: app.lambda_handler
@@ -110,6 +112,7 @@ Resources:
   ## Lambda: Start Textract job when file uploaded
   TextractStarterLambda:
     Type: AWS::Serverless::Function
+    DependsOn: InputBucket
     Properties:
       CodeUri: lambdas/textract_starter/
       Handler: app.lambda_handler
@@ -118,18 +121,24 @@ Resources:
           DYNAMO_TABLE: !Ref CaseMetadataTable
           SNS_TOPIC_ARN: !Ref TextractJobCompleteTopic
       Policies:
-        - S3ReadPolicy:
-            BucketName: !Ref InputBucket
-        - DynamoDBCrudPolicy:
-            TableName: !Ref CaseMetadataTable
-        - Statement:
-            - Effect: Allow
-              Action:
-                - textract:StartDocumentTextDetection
-                - textract:StartDocumentAnalysis
-              Resource: "*"
-        - SNSPublishMessagePolicy:
-            TopicName: !GetAtt TextractJobCompleteTopic.TopicName
+      - Statement:
+          - Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:ListBucket
+            Resource:
+              - !Sub arn:aws:s3:::${InputBucket}
+              - !Sub arn:aws:s3:::${InputBucket}/*
+      - DynamoDBCrudPolicy:
+          TableName: !Ref CaseMetadataTable
+      - Statement:
+          - Effect: Allow
+            Action:
+              - textract:StartDocumentTextDetection
+              - textract:StartDocumentAnalysis
+            Resource: "*"
+      - SNSPublishMessagePolicy:
+          TopicName: !GetAtt TextractJobCompleteTopic.TopicName
       Events:
         S3Trigger:
           Type: S3
@@ -140,6 +149,7 @@ Resources:
   ## Lambda: Handle Textract completion via SNS
   TextractCompletionLambda:
     Type: AWS::Serverless::Function
+    DependsOn: InputBucket
     Properties:
       CodeUri: lambdas/textract_completion/
       Handler: app.lambda_handler
@@ -147,14 +157,24 @@ Resources:
         Variables:
           DYNAMO_TABLE: !Ref CaseMetadataTable
       Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref CaseMetadataTable
-        - Statement:
-            - Effect: Allow
-              Action:
-                - textract:GetDocumentTextDetection
-                - textract:GetDocumentAnalysis
-              Resource: "*"
+      - Statement:
+          - Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:ListBucket
+            Resource:
+              - !Sub arn:aws:s3:::${InputBucket}
+              - !Sub arn:aws:s3:::${InputBucket}/*
+      - DynamoDBCrudPolicy:
+          TableName: !Ref CaseMetadataTable
+      - Statement:
+          - Effect: Allow
+            Action:
+              - textract:StartDocumentTextDetection
+              - textract:StartDocumentAnalysis
+            Resource: "*"
+      - SNSPublishMessagePolicy:
+          TopicName: !GetAtt TextractJobCompleteTopic.TopicName
       Events:
         TextractJobDone:
           Type: SNS
