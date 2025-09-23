@@ -109,7 +109,7 @@ Resources:
   TextractJobCompleteTopic:
     Type: AWS::SNS::Topic
 
-    TextractStarterLambda:
+  TextractStarterLambda:
     Type: AWS::Serverless::Function
     DependsOn:
       - InputBucket
