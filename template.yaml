@@ -152,6 +152,25 @@ Resources:
                 - textract:GetDocumentTextDetection
                 - textract:GetDocumentAnalysis
               Resource: "*"
+  
+  TextractStarterLambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref TextractStarterLambda
+      Principal: s3.amazonaws.com
+      SourceArn: !GetAtt InputBucket.Arn
+
+  ## Bucket Notification for S3 → Lambda trigger
+  InputBucketNotification:
+    Type: AWS::S3::BucketNotification
+    Properties:
+      Bucket: !Ref InputBucket
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: s3:ObjectCreated:*
+            Function: !GetAtt TextractStarterLambda.Arn
+    DependsOn: TextractStarterLambdaInvokePermission
 
 Outputs:
   BucketName:
