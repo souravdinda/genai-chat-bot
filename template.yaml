@@ -40,7 +40,6 @@ Resources:
   ## Lambda #1 (Triggered by EventBridge Rule #1)
   EventBridgeLambdaOne:
     Type: AWS::Serverless::Function
-    DependsOn: InputBucket
     Properties:
       CodeUri: lambdas/lambda_one/
       Handler: app.lambda_handler
@@ -68,7 +67,6 @@ Resources:
   ## Lambda #2 (Triggered by EventBridge Rule #2)
   EventBridgeLambdaTwo:
     Type: AWS::Serverless::Function
-    DependsOn: InputBucket
     Properties:
       CodeUri: lambdas/lambda_two/
       Handler: app.lambda_handler
