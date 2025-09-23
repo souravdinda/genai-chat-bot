@@ -109,6 +109,48 @@ Resources:
   TextractJobCompleteTopic:
     Type: AWS::SNS::Topic
 
+    TextractStarterLambda:
+    Type: AWS::Serverless::Function
+    DependsOn:
+      - InputBucket
+    Properties:
+      CodeUri: lambdas/textract_starter/
+      Handler: app.lambda_handler
+      Environment:
+        Variables:
+          DYNAMO_TABLE: !Ref CaseMetadataTable
+          SNS_TOPIC_ARN: !Ref TextractJobCompleteTopic
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:ListBucket
+              Resource:
+                - !Sub arn:aws:s3:::${InputBucket}
+                - !Sub arn:aws:s3:::${InputBucket}/*
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+              Resource: !GetAtt CaseMetadataTable.Arn
+        - Statement:
+            - Effect: Allow
+              Action:
+                - textract:StartDocumentTextDetection
+                - textract:StartDocumentAnalysis
+              Resource: "*"
+        - SNSPublishMessagePolicy:
+            TopicName: !GetAtt TextractJobCompleteTopic.TopicName
+      Events:
+        S3Trigger:
+          Type: S3
+          Properties:
+            Bucket: !Ref InputBucket
+            Events: s3:ObjectCreated:*
+
     
 
 Outputs:
