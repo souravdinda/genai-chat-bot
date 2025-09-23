@@ -135,6 +135,23 @@ Resources:
               Resource: "*"
         - SNSPublishMessagePolicy:
             TopicName: !Ref TextractJobCompleteTopic
+  TextractCompletionLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambdas/textract_completion/
+      Handler: app.lambda_handler
+      Environment:
+        Variables:
+          DYNAMO_TABLE: !Ref CaseMetadataTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CaseMetadataTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - textract:GetDocumentTextDetection
+                - textract:GetDocumentAnalysis
+              Resource: "*"
 
 Outputs:
   BucketName:
