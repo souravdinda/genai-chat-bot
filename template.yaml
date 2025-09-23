@@ -138,8 +138,6 @@ Resources:
                 - textract:StartDocumentTextDetection
                 - textract:StartDocumentAnalysis
               Resource: "*"
-        - SNSPublishMessagePolicy:
-            TopicName: !GetAtt TextractJobCompleteTopic.TopicName
       Events:
         S3Trigger:
           Type: S3
