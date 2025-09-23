@@ -111,8 +111,6 @@ Resources:
 
   TextractStarterLambda:
     Type: AWS::Serverless::Function
-    DependsOn:
-      - InputBucket
     Properties:
       CodeUri: lambdas/textract_starter/
       Handler: app.lambda_handler
