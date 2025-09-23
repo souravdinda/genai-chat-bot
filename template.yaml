@@ -57,7 +57,7 @@ Resources:
                 - kms:Encrypt
                 - kms:Decrypt
                 - kms:GenerateDataKey
-              Resource: !Ref AppKmsKey
+              Resource: !GetAtt AppKmsKey.Arn
       Events:
         ScheduleOne:
           Type: Schedule
@@ -84,7 +84,7 @@ Resources:
                 - kms:Encrypt
                 - kms:Decrypt
                 - kms:GenerateDataKey
-              Resource: !Ref AppKmsKey
+              Resource: !GetAtt AppKmsKey.Arn
       Events:
         ScheduleTwo:
           Type: Schedule
@@ -96,5 +96,5 @@ Outputs:
     Value: !Ref InputBucket
     Description: "KMS-encrypted S3 bucket for PDFs"
   KmsKeyId:
-    Value: !Ref AppKmsKey
+    Value: !GetAtt AppKmsKey.Arn
     Description: "KMS CMK used for encryption"
