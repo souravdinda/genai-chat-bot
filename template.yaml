@@ -90,6 +90,77 @@ Resources:
           Type: Schedule
           Properties:
             Schedule: cron(0 2 * * ? *)
+  
+  ## DynamoDB for case/job metadata
+  CaseMetadataTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: CaseId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: CaseId
+          KeyType: HASH
+
+  ## SNS Topic for Textract job completion
+  TextractJobCompleteTopic:
+    Type: AWS::SNS::Topic
+
+  ## Lambda: Start Textract job when file uploaded
+  TextractStarterLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambdas/textract_starter/
+      Handler: app.lambda_handler
+      Environment:
+        Variables:
+          DYNAMO_TABLE: !Ref CaseMetadataTable
+          SNS_TOPIC_ARN: !Ref TextractJobCompleteTopic
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref InputBucket
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CaseMetadataTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - textract:StartDocumentTextDetection
+                - textract:StartDocumentAnalysis
+              Resource: "*"
+        - SNSPublishMessagePolicy:
+            TopicName: !GetAtt TextractJobCompleteTopic.TopicName
+      Events:
+        S3Trigger:
+          Type: S3
+          Properties:
+            Bucket: !Ref InputBucket
+            Events: s3:ObjectCreated:*
+
+  ## Lambda: Handle Textract completion via SNS
+  TextractCompletionLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambdas/textract_completion/
+      Handler: app.lambda_handler
+      Environment:
+        Variables:
+          DYNAMO_TABLE: !Ref CaseMetadataTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CaseMetadataTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - textract:GetDocumentTextDetection
+                - textract:GetDocumentAnalysis
+              Resource: "*"
+      Events:
+        TextractJobDone:
+          Type: SNS
+          Properties:
+            Topic: !Ref TextractJobCompleteTopic
+    
 
 Outputs:
   BucketName:
@@ -98,3 +169,9 @@ Outputs:
   KmsKeyId:
     Value: !GetAtt AppKmsKey.Arn
     Description: "KMS CMK used for encryption"
+  DynamoTableName:
+    Value: !Ref CaseMetadataTable
+    Description: "DynamoDB table for case/job metadata"
+  TextractSNSTopic:
+    Value: !Ref TextractJobCompleteTopic
+    Description: "SNS Topic for Textract completion"
