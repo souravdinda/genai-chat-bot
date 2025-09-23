@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: >
-  SAM Template for PDF ingestion, Textract processing, and Salesforce integration.
+  SAM Template with EventBridge, Lambdas, S3 (KMS encrypted).
 
 Globals:
   Function:
@@ -11,6 +11,32 @@ Globals:
 
 Resources:
 
+  ## KMS Key
+  AppKmsKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: "KMS CMK for encrypting S3 objects"
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowRootAccount
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+            Action: "kms:*"
+            Resource: "*"
+
+  ## S3 bucket with KMS encryption
+  InputBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !Ref AppKmsKey
+
   ## Lambda #1 (Triggered by EventBridge Rule #1)
   EventBridgeLambdaOne:
     Type: AWS::Serverless::Function
@@ -18,11 +44,24 @@ Resources:
       CodeUri: lambdas/lambda_one/
       Handler: app.lambda_handler
       Description: "Lambda triggered by EventBridge Rule #1"
+      Environment:
+        Variables:
+          INPUT_BUCKET: !Ref InputBucket
+          KMS_KEY_ID: !Ref AppKmsKey
+      Policies:
+        - S3WritePolicy:
+            BucketName: !Ref InputBucket
+        - Statement:
+            - Effect: Allow
+              Action:
+                - kms:Encrypt
+                - kms:Decrypt
+                - kms:GenerateDataKey
+              Resource: !Ref AppKmsKey
       Events:
         ScheduleOne:
           Type: Schedule
           Properties:
-            # Example: Run every day at 1 AM UTC
             Schedule: cron(0 1 * * ? *)
 
   ## Lambda #2 (Triggered by EventBridge Rule #2)
@@ -32,9 +71,30 @@ Resources:
       CodeUri: lambdas/lambda_two/
       Handler: app.lambda_handler
       Description: "Lambda triggered by EventBridge Rule #2"
+      Environment:
+        Variables:
+          INPUT_BUCKET: !Ref InputBucket
+          KMS_KEY_ID: !Ref AppKmsKey
+      Policies:
+        - S3WritePolicy:
+            BucketName: !Ref InputBucket
+        - Statement:
+            - Effect: Allow
+              Action:
+                - kms:Encrypt
+                - kms:Decrypt
+                - kms:GenerateDataKey
+              Resource: !Ref AppKmsKey
       Events:
         ScheduleTwo:
           Type: Schedule
           Properties:
-            # Example: Run every day at 2 AM UTC
             Schedule: cron(0 2 * * ? *)
+
+Outputs:
+  BucketName:
+    Value: !Ref InputBucket
+    Description: "KMS-encrypted S3 bucket for PDFs"
+  KmsKeyId:
+    Value: !Ref AppKmsKey
+    Description: "KMS CMK used for encryption"
