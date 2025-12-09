@@ -1,0 +1,87 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'GenAI Bot - AI Services Stack (OpenSearch, Lex)'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, prod]
+    Description: Environment name
+
+Resources:
+  # OpenSearch Domain
+  OpenSearchDomain:
+    Type: AWS::OpenSearchService::Domain
+    Properties:
+      DomainName: !Sub genai-bot-os-${Environment}
+      EngineVersion: 'OpenSearch_2.11'
+      ClusterConfig:
+        InstanceType: 't3.small.search'
+        InstanceCount: 1
+        DedicatedMasterEnabled: false
+        ZoneAwarenessEnabled: false
+      EBSOptions:
+        EBSEnabled: true
+        VolumeSize: 10
+        VolumeType: gp3
+      EncryptionAtRestOptions:
+        Enabled: true
+      NodeToNodeEncryptionOptions:
+        Enabled: true
+      DomainEndpointOptions:
+        EnforceHTTPS: true
+        TLSSecurityPolicy: Policy-Min-TLS-1-2-2019-07
+      AccessPolicies:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: 'es:*'
+            Resource: !Sub 'arn:aws:es:${AWS::Region}:${AWS::AccountId}:domain/genai-bot-os-${Environment}/*'
+
+  # Lex Bot Role
+  LexBotRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lex.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: LexRuntimePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - polly:SynthesizeSpeech
+                Resource: '*'
+
+  # Lex Bot (Basic Placeholder) - Commented out due to import error
+  # GenAIBot:
+  #   Type: AWS::Lex::Bot
+  #   Properties:
+  #     Name: !Sub GenAIBot_${Environment}
+  #     RoleArn: !GetAtt LexBotRole.Arn
+  #     DataPrivacy:
+  #       ChildDirected: false
+  #     IdleSessionTTLInSeconds: 300
+  #     BotLocales:
+  #       - LocaleId: en_US
+  #         NluConfidenceThreshold: 0.40
+  #         VoiceSettings:
+  #           VoiceId: Joanna
+
+Outputs:
+  OpenSearchDomainEndpoint:
+    Value: !GetAtt OpenSearchDomain.DomainEndpoint
+    Export:
+      Name: !Sub ${AWS::StackName}-OpenSearchEndpoint
+  # LexBotId:
+  #   Value: !Ref GenAIBot
+  #   Export:
+  #     Name: !Sub ${AWS::StackName}-LexBotId

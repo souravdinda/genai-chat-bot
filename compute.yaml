@@ -1,0 +1,106 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'GenAI Bot - Compute Stack (Lambda)'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, prod]
+    Description: Environment name
+  ConfigTableName:
+    Type: String
+    Description: Name of the DynamoDB Config Table
+  ChatHistoryTableName:
+    Type: String
+    Description: Name of the DynamoDB Chat History Table
+  OpenSearchEndpoint:
+    Type: String
+    Description: Endpoint of the OpenSearch Domain
+
+Resources:
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: GenAIBotLambdaPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:Query
+                  - dynamodb:UpdateItem
+                Resource:
+                  - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${ConfigTableName}
+                  - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${ChatHistoryTableName}
+              - Effect: Allow
+                Action:
+                  - es:ESHttpPost
+                  - es:ESHttpPut
+                  - es:ESHttpGet
+                Resource: !Sub arn:aws:es:${AWS::Region}:${AWS::AccountId}:domain/*
+
+  # Lambda: Content Designer
+  ContentDesignerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub genai-bot-content-designer-${Environment}
+      Handler: index.handler
+      Runtime: python3.11
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: |
+          import json
+          import os
+          def handler(event, context):
+              return {
+                  'statusCode': 200,
+                  'body': json.dumps('Hello from Content Designer! Config Table: ' + os.environ['CONFIG_TABLE'])
+              }
+      Environment:
+        Variables:
+          CONFIG_TABLE: !Ref ConfigTableName
+
+  # Lambda: Bot Fulfillment
+  BotFulfillmentFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub genai-bot-fulfillment-${Environment}
+      Handler: index.handler
+      Runtime: python3.11
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 60
+      Code:
+        ZipFile: |
+          import json
+          import os
+          def handler(event, context):
+              return {
+                  'statusCode': 200,
+                  'body': json.dumps('Hello from Bot Fulfillment! History Table: ' + os.environ['HISTORY_TABLE'] + ', OS: ' + os.environ['OPENSEARCH_ENDPOINT'])
+              }
+      Environment:
+        Variables:
+          HISTORY_TABLE: !Ref ChatHistoryTableName
+          OPENSEARCH_ENDPOINT: !Ref OpenSearchEndpoint
+
+Outputs:
+  ContentDesignerFunctionArn:
+    Value: !GetAtt ContentDesignerFunction.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-ContentDesignerArn
+  BotFulfillmentFunctionArn:
+    Value: !GetAtt BotFulfillmentFunction.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-BotFulfillmentArn

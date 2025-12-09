@@ -1,0 +1,69 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'GenAI Bot - Root Stack (Phase 1: Core)'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, prod]
+    Description: Environment name
+  S3TemplateBucket:
+    Type: String
+    Description: S3 Bucket where nested templates are stored
+
+Resources:
+  AuthStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.amazonaws.com/${S3TemplateBucket}/genai-bot-copy/auth.yaml
+      Parameters:
+        Environment: !Ref Environment
+
+  DatabaseStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.amazonaws.com/${S3TemplateBucket}/genai-bot-copy/database.yaml
+      Parameters:
+        Environment: !Ref Environment
+
+  StorageS3Stack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.amazonaws.com/${S3TemplateBucket}/genai-bot-copy/storage-s3.yaml
+      Parameters:
+        Environment: !Ref Environment
+
+  AIServicesStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.amazonaws.com/${S3TemplateBucket}/genai-bot-copy/ai-services.yaml
+      Parameters:
+        Environment: !Ref Environment
+
+  ComputeStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: [DatabaseStack, AIServicesStack]
+    Properties:
+      TemplateURL: !Sub https://s3.amazonaws.com/${S3TemplateBucket}/genai-bot-copy/compute.yaml
+      Parameters:
+        Environment: !Ref Environment
+        ConfigTableName: !GetAtt DatabaseStack.Outputs.ConfigTableName
+        ChatHistoryTableName: !GetAtt DatabaseStack.Outputs.ChatHistoryTableName
+        OpenSearchEndpoint: !GetAtt AIServicesStack.Outputs.OpenSearchDomainEndpoint
+
+  ApiStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: [ComputeStack, AuthStack]
+    Properties:
+      TemplateURL: !Sub https://s3.amazonaws.com/${S3TemplateBucket}/genai-bot-copy/api.yaml
+      Parameters:
+        Environment: !Ref Environment
+        ContentDesignerFunctionArn: !GetAtt ComputeStack.Outputs.ContentDesignerFunctionArn
+        BotFulfillmentFunctionArn: !GetAtt ComputeStack.Outputs.BotFulfillmentFunctionArn
+        UserPoolArn: !GetAtt AuthStack.Outputs.UserPoolArn
+
+Outputs:
+  ApiEndpoint:
+    Value: !GetAtt ApiStack.Outputs.ApiEndpoint
+  CognitoUserPoolId:
+    Value: !GetAtt AuthStack.Outputs.UserPoolId

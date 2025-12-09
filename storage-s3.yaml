@@ -1,0 +1,63 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'GenAI Bot - Storage Stack (S3)'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, prod]
+    Description: Environment name
+
+Resources:
+  # S3 Bucket for Client UI
+  ClientUIBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub genai-bot-client-ui-${Environment}-${AWS::AccountId}
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: error.html
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+
+  ClientUIBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ClientUIBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: PublicReadGetObject
+            Effect: Allow
+            Principal: '*'
+            Action: s3:GetObject
+            Resource: !Sub ${ClientUIBucket.Arn}/*
+
+  # S3 Bucket for Knowledge Base Source
+  KnowledgeBaseSourceBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub genai-bot-kb-source-${Environment}-${AWS::AccountId}
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+Outputs:
+  ClientUIBucketName:
+    Value: !Ref ClientUIBucket
+    Export:
+      Name: !Sub ${AWS::StackName}-ClientUIBucketName
+  ClientUIBucketWebsiteURL:
+    Value: !GetAtt ClientUIBucket.WebsiteURL
+    Export:
+      Name: !Sub ${AWS::StackName}-ClientUIBucketWebsiteURL
+  KnowledgeBaseSourceBucketName:
+    Value: !Ref KnowledgeBaseSourceBucket
+    Export:
+      Name: !Sub ${AWS::StackName}-KnowledgeBaseSourceBucketName
