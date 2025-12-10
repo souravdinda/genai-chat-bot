@@ -7,6 +7,12 @@ Parameters:
     Default: dev
     AllowedValues: [dev, prod]
     Description: Environment name
+  ProjectId:
+    Type: String
+    Description: Project ID
+  PortfolioId:
+    Type: String
+    Description: Portfolio ID
   ContentDesignerFunctionArn:
     Type: String
     Description: ARN of the Content Designer Lambda
@@ -21,7 +27,7 @@ Resources:
   ApiGateway:
     Type: AWS::ApiGateway::RestApi
     Properties:
-      Name: !Sub genai-bot-api-${Environment}
+      Name: !Sub ${ProjectId}-${PortfolioId}-Chatbot-${Environment}-API
       Description: API for GenAI Bot
 
   # Authorizer (Cognito)

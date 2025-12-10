@@ -7,12 +7,18 @@ Parameters:
     Default: dev
     AllowedValues: [dev, prod]
     Description: Environment name
+  ProjectId:
+    Type: String
+    Description: Project ID
+  PortfolioId:
+    Type: String
+    Description: Portfolio ID
 
 Resources:
   UserPool:
     Type: AWS::Cognito::UserPool
     Properties:
-      UserPoolName: !Sub genai-bot-user-pool-${Environment}
+      UserPoolName: !Sub ${ProjectId}-${PortfolioId}-Chatbot-${Environment}-UserPool
       AutoVerifiedAttributes:
         - email
       Policies:
@@ -26,7 +32,7 @@ Resources:
   UserPoolClient:
     Type: AWS::Cognito::UserPoolClient
     Properties:
-      ClientName: !Sub genai-bot-client-${Environment}
+      ClientName: !Sub ${ProjectId}-${PortfolioId}-Chatbot-${Environment}-Client
       UserPoolId: !Ref UserPool
       GenerateSecret: false
       ExplicitAuthFlows:
@@ -37,7 +43,7 @@ Resources:
   IdentityPool:
     Type: AWS::Cognito::IdentityPool
     Properties:
-      IdentityPoolName: !Sub genai-bot-identity-pool-${Environment}
+      IdentityPoolName: !Sub ${ProjectId}-${PortfolioId}-Chatbot-${Environment}-IdentityPool
       AllowUnauthenticatedIdentities: false
       CognitoIdentityProviders:
         - ClientId: !Ref UserPoolClient

@@ -7,6 +7,18 @@ Parameters:
     Default: dev
     AllowedValues: [dev, prod]
     Description: Environment name
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC ID
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: List of Subnet IDs
+  ProjectId:
+    Type: String
+    Description: Project ID
+  PortfolioId:
+    Type: String
+    Description: Portfolio ID
   ConfigTableName:
     Type: String
     Description: Name of the DynamoDB Config Table
@@ -30,6 +42,7 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
       Policies:
         - PolicyName: GenAIBotLambdaPolicy
           PolicyDocument:
@@ -51,14 +64,27 @@ Resources:
                   - es:ESHttpGet
                 Resource: !Sub arn:aws:es:${AWS::Region}:${AWS::AccountId}:domain/*
 
+  LambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for Lambda
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+
   # Lambda: Content Designer
   ContentDesignerFunction:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Sub genai-bot-content-designer-${Environment}
+      FunctionName: !Sub ${ProjectId}-${PortfolioId}-Chatbot-${Environment}-ContentDesigner
       Handler: index.handler
       Runtime: python3.11
       Role: !GetAtt LambdaExecutionRole.Arn
+      VpcConfig:
+        SubnetIds: !Ref SubnetIds
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
       Code:
         ZipFile: |
           import json
@@ -76,11 +102,16 @@ Resources:
   BotFulfillmentFunction:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Sub genai-bot-fulfillment-${Environment}
+      FunctionName: !Sub ${ProjectId}-${PortfolioId}-Chatbot-${Environment}-Fulfillment
       Handler: index.handler
       Runtime: python3.11
       Role: !GetAtt LambdaExecutionRole.Arn
       Timeout: 60
+      VpcConfig:
+        SubnetIds: !Ref SubnetIds
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+
       Code:
         ZipFile: |
           import json

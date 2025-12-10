@@ -7,13 +7,30 @@ Parameters:
     Default: dev
     AllowedValues: [dev, prod]
     Description: Environment name
+  ProjectId:
+    Type: String
+    Description: Project ID
+  PortfolioId:
+    Type: String
+    Description: Portfolio ID
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC ID
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: List of Subnet IDs
 
 Resources:
   # OpenSearch Domain
   OpenSearchDomain:
     Type: AWS::OpenSearchService::Domain
     Properties:
-      DomainName: !Sub genai-bot-os-${Environment}
+      DomainName: !Sub chatbot-${ProjectId}-${PortfolioId}-${Environment}-os
+      VPCOptions:
+        SubnetIds: 
+          - !Select [0, !Ref SubnetIds]
+        SecurityGroupIds:
+          - !Ref OpenSearchSecurityGroup
       EngineVersion: 'OpenSearch_2.11'
       ClusterConfig:
         InstanceType: 't3.small.search'
@@ -38,7 +55,7 @@ Resources:
             Principal:
               AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
             Action: 'es:*'
-            Resource: !Sub 'arn:aws:es:${AWS::Region}:${AWS::AccountId}:domain/genai-bot-os-${Environment}/*'
+            Resource: !Sub 'arn:aws:es:${AWS::Region}:${AWS::AccountId}:domain/chatbot-${ProjectId}-${PortfolioId}-${Environment}-os/*'
 
   # Lex Bot Role
   LexBotRole:
@@ -60,6 +77,17 @@ Resources:
                 Action:
                   - polly:SynthesizeSpeech
                 Resource: '*'
+
+  OpenSearchSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for OpenSearch
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
 
   # Lex Bot (Basic Placeholder) - Commented out due to import error
   # GenAIBot:

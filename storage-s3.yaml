@@ -7,13 +7,19 @@ Parameters:
     Default: dev
     AllowedValues: [dev, prod]
     Description: Environment name
+  ProjectId:
+    Type: String
+    Description: Project ID
+  PortfolioId:
+    Type: String
+    Description: Portfolio ID
 
 Resources:
   # S3 Bucket for Client UI
   ClientUIBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub genai-bot-client-ui-${Environment}-${AWS::AccountId}
+      BucketName: !Sub ${ProjectId}-${PortfolioId}-chatbot-${Environment}-ui-${AWS::AccountId}
       WebsiteConfiguration:
         IndexDocument: index.html
         ErrorDocument: error.html
@@ -40,7 +46,7 @@ Resources:
   KnowledgeBaseSourceBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub genai-bot-kb-source-${Environment}-${AWS::AccountId}
+      BucketName: !Sub ${ProjectId}-${PortfolioId}-chatbot-${Environment}-kb-${AWS::AccountId}
       VersioningConfiguration:
         Status: Enabled
       BucketEncryption:

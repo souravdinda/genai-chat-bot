@@ -7,12 +7,18 @@ Parameters:
     Default: dev
     AllowedValues: [dev, prod]
     Description: Environment name
+  ProjectId:
+    Type: String
+    Description: Project ID
+  PortfolioId:
+    Type: String
+    Description: Portfolio ID
 
 Resources:
   ConfigTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: !Sub genai-bot-config-${Environment}
+      TableName: !Sub ${ProjectId}-${PortfolioId}-Chatbot-${Environment}-Config
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
         - AttributeName: configKey
@@ -24,7 +30,7 @@ Resources:
   ChatHistoryTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: !Sub genai-bot-history-${Environment}
+      TableName: !Sub ${ProjectId}-${PortfolioId}-Chatbot-${Environment}-History
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
         - AttributeName: userId
