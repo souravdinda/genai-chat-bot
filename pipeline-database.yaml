@@ -1,0 +1,44 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Document Pipeline - Database Stack (DynamoDB)'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: Environment name
+  ProjectId:
+    Type: String
+    Description: Project ID
+  PortfolioId:
+    Type: String
+    Description: Portfolio ID
+  StackName:
+    Type: String
+    Description: Name of the stack
+
+Resources:
+  JobStatusTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub ${ProjectId}-${PortfolioId}-${StackName}-${Environment}-jobs
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: JobId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: JobId
+          KeyType: HASH
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+Outputs:
+  JobStatusTableName:
+    Value: !Ref JobStatusTable
+    Export:
+      Name: !Sub ${StackName}-JobStatusTableName
+  JobStatusTableArn:
+    Value: !GetAtt JobStatusTable.Arn
+    Export:
+      Name: !Sub ${StackName}-JobStatusTableArn

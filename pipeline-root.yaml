@@ -1,0 +1,89 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Document Pipeline - Root Orchestration Stack'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: Environment name
+  S3TemplateBucket:
+    Type: String
+    Description: S3 Bucket where nested templates are stored
+  ProjectId:
+    Type: String
+    Default: '034'
+    Description: Project ID
+  PortfolioId:
+    Type: String
+    Default: '020'
+    Description: Portfolio ID
+
+Resources:
+  # 1. Security Stack
+  SecurityStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.amazonaws.com/${S3TemplateBucket}/doc-pipeline/pipeline-security.yaml
+      Parameters:
+        Environment: !Ref Environment
+        ProjectId: !Ref ProjectId
+        PortfolioId: !Ref PortfolioId
+        StackName: !Ref AWS::StackName
+
+  # 2. Database Stack
+  DatabaseStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.amazonaws.com/${S3TemplateBucket}/doc-pipeline/pipeline-database.yaml
+      Parameters:
+        Environment: !Ref Environment
+        ProjectId: !Ref ProjectId
+        PortfolioId: !Ref PortfolioId
+        StackName: !Ref AWS::StackName
+
+  # 3. Messaging Stack
+  MessagingStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: SecurityStack
+    Properties:
+      TemplateURL: !Sub https://s3.amazonaws.com/${S3TemplateBucket}/doc-pipeline/pipeline-messaging.yaml
+      Parameters:
+        Environment: !Ref Environment
+        ProjectId: !Ref ProjectId
+        PortfolioId: !Ref PortfolioId
+        StackName: !Ref AWS::StackName
+        KmsKeyArn: !GetAtt SecurityStack.Outputs.PipelineKeyArn
+
+  # 4. Storage Stack
+  StorageStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.amazonaws.com/${S3TemplateBucket}/doc-pipeline/pipeline-storage.yaml
+      Parameters:
+        Environment: !Ref Environment
+        ProjectId: !Ref ProjectId
+        PortfolioId: !Ref PortfolioId
+        StackName: !Ref AWS::StackName
+
+  # 5. Compute Stack
+  ComputeStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: [SecurityStack, DatabaseStack, MessagingStack, StorageStack]
+    Properties:
+      TemplateURL: !Sub https://s3.amazonaws.com/${S3TemplateBucket}/doc-pipeline/pipeline-compute.yaml
+      Parameters:
+        Environment: !Ref Environment
+        ProjectId: !Ref ProjectId
+        PortfolioId: !Ref PortfolioId
+        StackName: !Ref AWS::StackName
+        InputDocumentBucketName: !GetAtt StorageStack.Outputs.InputDocumentBucketName
+        JobStatusTableName: !GetAtt DatabaseStack.Outputs.JobStatusTableName
+        TextractJobCompleteTopicArn: !GetAtt MessagingStack.Outputs.TextractJobCompleteTopicArn
+        KmsKeyArn: !GetAtt SecurityStack.Outputs.PipelineKeyArn
+        IngestionSecretArn: !GetAtt SecurityStack.Outputs.IngestionSecretArn
+
+Outputs:
+  InputBucket:
+    Value: !GetAtt StorageStack.Outputs.InputDocumentBucketName
+  JobStatusTable:
+    Value: !GetAtt DatabaseStack.Outputs.JobStatusTableName

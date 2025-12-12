@@ -1,0 +1,299 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Document Pipeline - Compute Stack (Lambda)'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: Environment name
+  ProjectId:
+    Type: String
+    Description: Project ID
+  PortfolioId:
+    Type: String
+    Description: Portfolio ID
+  StackName:
+    Type: String
+    Description: Name of the stack
+  InputDocumentBucketName:
+    Type: String
+    Description: S3 Bucket Name for inputs
+  JobStatusTableName:
+    Type: String
+    Description: DynamoDB Table Name for job status
+  TextractJobCompleteTopicArn:
+    Type: String
+    Description: SNS Topic ARN for Textract notifications
+  KmsKeyArn:
+    Type: String
+    Description: KMS Key ARN for encryption
+  IngestionSecretArn:
+    Type: String
+    Description: Secret ARN for Ingestion Credentials
+
+Resources:
+  PipelineLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: PipelineAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                  - s3:PutObject
+                Resource: 
+                  - !Sub arn:aws:s3:::${InputDocumentBucketName}
+                  - !Sub arn:aws:s3:::${InputDocumentBucketName}/*
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:GetItem
+                Resource: !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${JobStatusTableName}
+              - Effect: Allow
+                Action:
+                  - textract:StartDocumentAnalysis
+                  - textract:GetDocumentAnalysis
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - sns:Publish
+                Resource: !Ref TextractJobCompleteTopicArn
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:GenerateDataKey
+                Resource: !Ref KmsKeyArn
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Ref IngestionSecretArn
+
+  # --------------------------------------------------------------------------
+  # 1. Start Textract Job (Triggered by S3 Event via EventBridge)
+  # --------------------------------------------------------------------------
+  StartTextractFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub ${ProjectId}-${PortfolioId}-${StackName}-${Environment}-start-textract
+      Runtime: python3.11
+      Handler: index.handler
+      Role: !GetAtt PipelineLambdaRole.Arn
+      Timeout: 60
+      Environment:
+        Variables:
+          JOB_TABLE: !Ref JobStatusTableName
+          SNS_TOPIC_ARN: !Ref TextractJobCompleteTopicArn
+          KMS_KEY_ARN: !Ref KmsKeyArn
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import os
+
+          textract = boto3.client('textract')
+          dynamodb = boto3.table(os.environ['JOB_TABLE'])
+
+          def handler(event, context):
+              print("Received event:", json.dumps(event))
+              # EventBridge S3 Object Created payload parsing
+              bucket = event['detail']['bucket']['name']
+              key = event['detail']['object']['key']
+
+              print(f"Starting Textract for {bucket}/{key}")
+              
+              response = textract.start_document_analysis(
+                  DocumentLocation={'S3Object': {'Bucket': bucket, 'Name': key}},
+                  FeatureTypes=['TABLES', 'FORMS'],
+                  NotificationChannel={
+                      'SNSTopicArn': os.environ['SNS_TOPIC_ARN'],
+                      'RoleArn': '...' # Requires an IAM role for Textract to publish to SNS. Passing RoleArn here implies Lambda creates it or we pass a pre-created one.
+                      # Simpler: Use JobId to poll or waiting for SNS if permissions allow.
+                      # Ideally: We need a Service Role for Textract to publish to SNS.
+                  },
+                  KMSKeyId=os.environ['KMS_KEY_ARN'] 
+              )
+              
+              job_id = response['JobId']
+              dynamodb.put_item(Item={'JobId': job_id, 'Status': 'STARTED', 'S3Key': key})
+              return {'JobId': job_id}
+
+  # Textract Service Role to publish to SNS (Required for StartDocumentAnalysis)
+  TextractPublishRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: textract.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: SNSAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: sns:Publish
+                Resource: !Ref TextractJobCompleteTopicArn
+  
+  # Trigger rule for StartTextractFunction
+  S3UploadRule:
+    Type: AWS::Events::Rule
+    Properties:
+      EventPattern:
+        source:
+          - aws.s3
+        detail-type:
+          - Object Created
+        detail:
+          bucket:
+            name:
+              - !Ref InputDocumentBucketName
+      Targets:
+        - Arn: !GetAtt StartTextractFunction.Arn
+          Id: TargetFunctionV1
+
+  StartTextractFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref StartTextractFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt S3UploadRule.Arn
+
+  # --------------------------------------------------------------------------
+  # 2. Process Textract Results (Triggered by SNS)
+  # --------------------------------------------------------------------------
+  ProcessTextractFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub ${ProjectId}-${PortfolioId}-${StackName}-${Environment}-process-textract
+      Runtime: python3.11
+      Handler: index.handler
+      Role: !GetAtt PipelineLambdaRole.Arn
+      Timeout: 300
+      Environment:
+        Variables:
+          JOB_TABLE: !Ref JobStatusTableName
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import os
+
+          textract = boto3.client('textract')
+          dynamodb = boto3.resource('dynamodb').Table(os.environ['JOB_TABLE'])
+
+          def handler(event, context):
+              print("Received SNS event:", json.dumps(event))
+              message = json.loads(event['Records'][0]['Sns']['Message'])
+              job_id = message['JobId']
+              status = message['Status']
+              
+              if status == 'SUCCEEDED':
+                  print(f"Job {job_id} succeeded. Fetching results...")
+                  # In real implementation: handle pagination
+                  response = textract.get_document_analysis(JobId=job_id)
+                  # Placeholder: Send to Salesforce
+                  print("Sending payload to Salesforce...")
+                  
+                  dynamodb.update_item(
+                      Key={'JobId': job_id},
+                      UpdateExpression="set Status=:s",
+                      ExpressionAttributeValues={':s': 'COMPLETED'}
+                  )
+              else:
+                  print(f"Job {job_id} failed.")
+                  dynamodb.update_item(
+                      Key={'JobId': job_id},
+                      UpdateExpression="set Status=:s",
+                      ExpressionAttributeValues={':s': 'FAILED'}
+                  )
+              return {'status': status}
+
+  ProcessTextractFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ProcessTextractFunction
+      Action: lambda:InvokeFunction
+      Principal: sns.amazonaws.com
+      SourceArn: !Ref TextractJobCompleteTopicArn
+
+  TextractTopicSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Endpoint: !GetAtt ProcessTextractFunction.Arn
+      Protocol: lambda
+      TopicArn: !Ref TextractJobCompleteTopicArn
+
+  # --------------------------------------------------------------------------
+  # 3. Ingestion Function (Scheduled)
+  # --------------------------------------------------------------------------
+  IngestionFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub ${ProjectId}-${PortfolioId}-${StackName}-${Environment}-ingestion
+      Runtime: python3.11
+      Handler: index.handler
+      Role: !GetAtt PipelineLambdaRole.Arn
+      Timeout: 300
+      Environment:
+        Variables:
+          BUCKET_NAME: !Ref InputDocumentBucketName
+          SECRET_ARN: !Ref IngestionSecretArn
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import os
+
+          s3 = boto3.client('s3')
+
+          def handler(event, context):
+              print("Scheduled Ingestion Triggered")
+              # Placeholder: Fetch from Parchment/NSC
+              # Upload dummy PDF for testing
+              bucket = os.environ['BUCKET_NAME']
+              key = 'test-document.pdf'
+              s3.put_object(Bucket=bucket, Key=key, Body=b'Dummy content')
+              print(f"Uploaded {key} to {bucket}")
+              return {'status': 'Ingestion Complete'}
+
+  IngestionSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      ScheduleExpression: rate(1 day)
+      Targets:
+        - Arn: !GetAtt IngestionFunction.Arn
+          Id: TargetFunctionV1
+
+  IngestionFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref IngestionFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt IngestionSchedule.Arn
+
+Outputs:
+  StartTextractFunctionArn:
+    Value: !GetAtt StartTextractFunction.Arn
+  ProcessTextractFunctionArn:
+    Value: !GetAtt ProcessTextractFunction.Arn
+  IngestionFunctionArn:
+    Value: !GetAtt IngestionFunction.Arn

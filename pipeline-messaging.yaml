@@ -1,0 +1,33 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Document Pipeline - Messaging Stack (SNS)'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: Environment name
+  ProjectId:
+    Type: String
+    Description: Project ID
+  PortfolioId:
+    Type: String
+    Description: Portfolio ID
+  StackName:
+    Type: String
+    Description: Name of the stack
+  KmsKeyArn:
+    Type: String
+    Description: ARN of KMS Key for encryption
+
+Resources:
+  TextractJobCompleteTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub ${ProjectId}-${PortfolioId}-${StackName}-${Environment}-textract-complete
+      KmsMasterKeyId: !Ref KmsKeyArn
+
+Outputs:
+  TextractJobCompleteTopicArn:
+    Value: !Ref TextractJobCompleteTopic
+    Export:
+      Name: !Sub ${StackName}-TextractJobCompleteTopicArn

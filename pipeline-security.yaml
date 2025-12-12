@@ -1,0 +1,82 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Document Pipeline - Security Stack (KMS)'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: Environment name
+  ProjectId:
+    Type: String
+    Description: Project ID
+  PortfolioId:
+    Type: String
+    Description: Portfolio ID
+  StackName:
+    Type: String
+    Description: Name of the stack
+
+Resources:
+  PipelineKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: Encryption key for Document Pipeline resources
+      Enabled: true
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: '2012-10-17'
+        Id: key-default-1
+        Statement:
+          - Sid: Enable IAM User Permissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: 'kms:*'
+            Resource: '*'
+          - Sid: Allow Service Access
+            Effect: Allow
+            Principal:
+              Service: 
+                - sns.amazonaws.com
+                - s3.amazonaws.com
+                - lambda.amazonaws.com
+                - textract.amazonaws.com
+            Action: 
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:DescribeKey
+            Resource: '*'
+
+  PipelineKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub alias/${ProjectId}-${PortfolioId}-${StackName}-${Environment}-key
+      TargetKeyId: !Ref PipelineKey
+
+  IngestionSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub ${ProjectId}-${PortfolioId}-${StackName}-${Environment}-credentials
+      Description: API Credentials for Parchment/NSC Ingestion
+      KmsKeyId: !Ref PipelineKey
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "admin"}'
+        GenerateStringKey: "password"
+        PasswordLength: 16
+        ExcludeCharacters: '"@/\'
+
+Outputs:
+  PipelineKeyArn:
+    Value: !GetAtt PipelineKey.Arn
+    Export:
+      Name: !Sub ${StackName}-PipelineKeyArn
+  PipelineKeyId:
+    Value: !Ref PipelineKey
+    Export:
+      Name: !Sub ${StackName}-PipelineKeyId
+  IngestionSecretArn:
+    Value: !Ref IngestionSecret
+    Export:
+      Name: !Sub ${StackName}-IngestionSecretArn

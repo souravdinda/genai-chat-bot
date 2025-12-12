@@ -1,0 +1,40 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Document Pipeline - Storage Stack (S3)'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: Environment name
+  ProjectId:
+    Type: String
+    Description: Project ID
+  PortfolioId:
+    Type: String
+    Description: Portfolio ID
+  StackName:
+    Type: String
+    Description: Name of the stack
+
+Resources:
+  InputDocumentBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${ProjectId}-${PortfolioId}-${StackName}-${Environment}-input
+      NotificationConfiguration:
+        EventBridgeConfiguration:
+          EventBridgeEnabled: true # Enable EventBridge for S3 events (Clean pattern)
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+Outputs:
+  InputDocumentBucketName:
+    Value: !Ref InputDocumentBucket
+    Export:
+      Name: !Sub ${StackName}-InputDocumentBucketName
+  InputDocumentBucketArn:
+    Value: !GetAtt InputDocumentBucket.Arn
+    Export:
+      Name: !Sub ${StackName}-InputDocumentBucketArn
