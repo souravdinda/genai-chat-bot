@@ -55,6 +55,7 @@ Resources:
 
   AIServicesStack:
     Type: AWS::CloudFormation::Stack
+    DependsOn: StorageS3Stack
     Properties:
       TemplateURL: !Sub https://s3.amazonaws.com/${S3TemplateBucket}/genai-bot-copy/ai-services.yaml
       Parameters:
@@ -63,6 +64,8 @@ Resources:
         PortfolioId: !Ref PortfolioId
         VpcId: !Ref VpcId
         SubnetIds: !Join [",", !Ref SubnetIds]
+        KnowledgeBaseSourceBucketArn: !GetAtt StorageS3Stack.Outputs.KnowledgeBaseSourceBucketArn
+        KnowledgeBaseSourceBucketName: !GetAtt StorageS3Stack.Outputs.KnowledgeBaseSourceBucketName
 
   ComputeStack:
     Type: AWS::CloudFormation::Stack
@@ -78,6 +81,7 @@ Resources:
         ConfigTableName: !GetAtt DatabaseStack.Outputs.ConfigTableName
         ChatHistoryTableName: !GetAtt DatabaseStack.Outputs.ChatHistoryTableName
         OpenSearchEndpoint: !GetAtt AIServicesStack.Outputs.OpenSearchDomainEndpoint
+        BedrockKnowledgeBaseId: !GetAtt AIServicesStack.Outputs.BedrockKnowledgeBaseId
 
   ApiStack:
     Type: AWS::CloudFormation::Stack

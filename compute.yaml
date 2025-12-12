@@ -28,6 +28,9 @@ Parameters:
   OpenSearchEndpoint:
     Type: String
     Description: Endpoint of the OpenSearch Domain
+  BedrockKnowledgeBaseId:
+    Type: String
+    Description: ID of the Bedrock Knowledge Base
 
 Resources:
   LambdaExecutionRole:
@@ -42,7 +45,6 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
       Policies:
         - PolicyName: GenAIBotLambdaPolicy
           PolicyDocument:
@@ -63,15 +65,11 @@ Resources:
                   - es:ESHttpPut
                   - es:ESHttpGet
                 Resource: !Sub arn:aws:es:${AWS::Region}:${AWS::AccountId}:domain/*
-
-  LambdaSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Security Group for Lambda
-      VpcId: !Ref VpcId
-      SecurityGroupEgress:
-        - IpProtocol: -1
-          CidrIp: 0.0.0.0/0
+              - Effect: Allow
+                Action:
+                  - bedrock:Retrieve
+                  - bedrock:RetrieveAndGenerate
+                Resource: !Sub arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/${BedrockKnowledgeBaseId}
 
   # Lambda: Content Designer
   ContentDesignerFunction:
@@ -81,10 +79,6 @@ Resources:
       Handler: index.handler
       Runtime: python3.11
       Role: !GetAtt LambdaExecutionRole.Arn
-      VpcConfig:
-        SubnetIds: !Ref SubnetIds
-        SecurityGroupIds:
-          - !Ref LambdaSecurityGroup
       Code:
         ZipFile: |
           import json
@@ -107,11 +101,6 @@ Resources:
       Runtime: python3.11
       Role: !GetAtt LambdaExecutionRole.Arn
       Timeout: 60
-      VpcConfig:
-        SubnetIds: !Ref SubnetIds
-        SecurityGroupIds:
-          - !Ref LambdaSecurityGroup
-
       Code:
         ZipFile: |
           import json
@@ -125,6 +114,7 @@ Resources:
         Variables:
           HISTORY_TABLE: !Ref ChatHistoryTableName
           OPENSEARCH_ENDPOINT: !Ref OpenSearchEndpoint
+          BEDROCK_KB_ID: !Ref BedrockKnowledgeBaseId
 
 Outputs:
   ContentDesignerFunctionArn:

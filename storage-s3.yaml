@@ -67,3 +67,7 @@ Outputs:
     Value: !Ref KnowledgeBaseSourceBucket
     Export:
       Name: !Sub ${AWS::StackName}-KnowledgeBaseSourceBucketName
+  KnowledgeBaseSourceBucketArn:
+    Value: !GetAtt KnowledgeBaseSourceBucket.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-KnowledgeBaseSourceBucketArn
