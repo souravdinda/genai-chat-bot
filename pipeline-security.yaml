@@ -55,18 +55,6 @@ Resources:
       AliasName: !Sub alias/${ProjectId}-${PortfolioId}-${StackName}-${Environment}-key
       TargetKeyId: !Ref PipelineKey
 
-  IngestionSecret:
-    Type: AWS::SecretsManager::Secret
-    Properties:
-      Name: !Sub ${ProjectId}-${PortfolioId}-${StackName}-${Environment}-credentials
-      Description: API Credentials for Parchment/NSC Ingestion
-      KmsKeyId: !Ref PipelineKey
-      GenerateSecretString:
-        SecretStringTemplate: '{"username": "admin"}'
-        GenerateStringKey: "password"
-        PasswordLength: 16
-        ExcludeCharacters: '"@/\'
-
 Outputs:
   PipelineKeyArn:
     Value: !GetAtt PipelineKey.Arn
@@ -76,7 +64,3 @@ Outputs:
     Value: !Ref PipelineKey
     Export:
       Name: !Sub ${StackName}-PipelineKeyId
-  IngestionSecretArn:
-    Value: !Ref IngestionSecret
-    Export:
-      Name: !Sub ${StackName}-IngestionSecretArn

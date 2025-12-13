@@ -26,8 +26,52 @@ Resources:
       TopicName: !Sub ${ProjectId}-${PortfolioId}-${StackName}-${Environment}-textract-complete
       KmsMasterKeyId: !Ref KmsKeyArn
 
+  # --------------------------------------------------------------------------
+  # SQS Queues for Input Buffering
+  # --------------------------------------------------------------------------
+  DocumentUploadDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub ${ProjectId}-${PortfolioId}-${StackName}-${Environment}-doc-upload-dlq
+      MessageRetentionPeriod: 1209600 # 14 days
+      KmsMasterKeyId: !Ref KmsKeyArn
+
+  DocumentUploadQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub ${ProjectId}-${PortfolioId}-${StackName}-${Environment}-doc-upload-queue
+      MessageRetentionPeriod: 345600 # 4 days
+      VisibilityTimeout: 300 # Should be >= Lambda timeout
+      KmsMasterKeyId: !Ref KmsKeyArn
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt DocumentUploadDLQ.Arn
+        maxReceiveCount: 3
+
+  # Allow EventBridge to send messages to the Queue
+  DocumentUploadQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref DocumentUploadQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt DocumentUploadQueue.Arn
+
 Outputs:
   TextractJobCompleteTopicArn:
     Value: !Ref TextractJobCompleteTopic
     Export:
       Name: !Sub ${StackName}-TextractJobCompleteTopicArn
+  DocumentUploadQueueArn:
+    Value: !GetAtt DocumentUploadQueue.Arn
+    Export:
+      Name: !Sub ${StackName}-DocumentUploadQueueArn
+  DocumentUploadQueueUrl:
+    Value: !Ref DocumentUploadQueue
+    Export:
+      Name: !Sub ${StackName}-DocumentUploadQueueUrl

@@ -27,9 +27,9 @@ Parameters:
   KmsKeyArn:
     Type: String
     Description: KMS Key ARN for encryption
-  IngestionSecretArn:
+  DocumentUploadQueueArn:
     Type: String
-    Description: Secret ARN for Ingestion Credentials
+    Description: ARN of SQS Queue for document upload events
 
 Resources:
   PipelineLambdaRole:
@@ -79,8 +79,10 @@ Resources:
                 Resource: !Ref KmsKeyArn
               - Effect: Allow
                 Action:
-                  - secretsmanager:GetSecretValue
-                Resource: !Ref IngestionSecretArn
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                Resource: !Ref DocumentUploadQueueArn
 
   # --------------------------------------------------------------------------
   # 1. Start Textract Job (Triggered by S3 Event via EventBridge)
@@ -165,16 +167,17 @@ Resources:
             name:
               - !Ref InputDocumentBucketName
       Targets:
-        - Arn: !GetAtt StartTextractFunction.Arn
-          Id: TargetFunctionV1
+        - Arn: !Ref DocumentUploadQueueArn
+          Id: TargetQueueV1
 
-  StartTextractFunctionPermission:
-    Type: AWS::Lambda::Permission
+  # Trigger Lambda from SQS
+  StartTextractEventSourceMapping:
+    Type: AWS::Lambda::EventSourceMapping
     Properties:
+      BatchSize: 10
+      EventSourceArn: !Ref DocumentUploadQueueArn
       FunctionName: !Ref StartTextractFunction
-      Action: lambda:InvokeFunction
-      Principal: events.amazonaws.com
-      SourceArn: !GetAtt S3UploadRule.Arn
+      Enabled: true
 
   # --------------------------------------------------------------------------
   # 2. Process Textract Results (Triggered by SNS)
@@ -255,7 +258,6 @@ Resources:
       Environment:
         Variables:
           BUCKET_NAME: !Ref InputDocumentBucketName
-          SECRET_ARN: !Ref IngestionSecretArn
       Code:
         ZipFile: |
           import json
@@ -304,7 +306,6 @@ Resources:
       Environment:
         Variables:
           BUCKET_NAME: !Ref InputDocumentBucketName
-          SECRET_ARN: !Ref IngestionSecretArn
       Code:
         ZipFile: |
           import json
