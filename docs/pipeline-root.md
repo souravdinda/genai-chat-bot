@@ -22,11 +22,11 @@ This stack does not create low-level AWS resources (like functions or buckets) d
 
 | Logical ID | Type | Description |
 | :--- | :--- | :--- |
-| **`SecurityStack`** | `AWS::CloudFormation::Stack` | Deploys KMS keys and Secrets. |
+| **`SecurityStack`** | `AWS::CloudFormation::Stack` | Deploys KMS keys. |
 | **`DatabaseStack`** | `AWS::CloudFormation::Stack` | Deploys the DynamoDB table. |
-| **`MessagingStack`** | `AWS::CloudFormation::Stack` | Deploys the SNS topic. depends on `SecurityStack` for encryption keys. |
+| **`MessagingStack`** | `AWS::CloudFormation::Stack` | Deploys the SNS topic and SQS Queues. depends on `SecurityStack` for encryption keys. |
 | **`StorageStack`** | `AWS::CloudFormation::Stack` | Deploys the S3 input bucket. |
-| **`ComputeStack`** | `AWS::CloudFormation::Stack` | Deploys all Lambda functions and IAM roles. depends on all previous stacks to reference their outputs (ARNs). |
+| **`ComputeStack`** | `AWS::CloudFormation::Stack` | Deploys all Lambda functions and IAM roles. depends on all previous stacks. |
 
 ## Output Details
 This stack exports key values from its child stacks to be easily accessible from the AWS Console or other parent stacks.

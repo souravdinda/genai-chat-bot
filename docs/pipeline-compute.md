@@ -16,8 +16,8 @@ This stack consumes the outputs from ALL other stacks to wire everything togethe
 | **`InputDocumentBucketName`** | String | S3 Bucket name (from Storage Stack) to allow read/write access. |
 | **`JobStatusTableName`** | String | DynamoDB Table name (from Database Stack) to update job status. |
 | **`TextractJobCompleteTopicArn`** | String | SNS Topic ARN (from Messaging Stack) to subscribe to or publish to. |
-| **`KmsKeyArn`** | String | KMS Key ARN (from Security Stack) to decrypt SNS messages and Secrets. |
-| **`IngestionSecretArn`** | String | Secret ARN (from Security Stack) to retrieve API credentials. |
+| **`KmsKeyArn`** | String | KMS Key ARN (from Security Stack) to decrypt SNS messages and SQS messages. |
+| **`DocumentUploadQueueArn`** | String | SQS Queue ARN (from Messaging Stack) used as the event source for the StartTextract Lambda. |
 
 ## Resource Details
 
@@ -27,14 +27,14 @@ This stack consumes the outputs from ALL other stacks to wire everything togethe
   - `dynamodb:PutItem/UpdateItem` on the status table.
   - `textract:Start/GetDocumentAnalysis`.
   - `kms:Decrypt` using the pipeline key.
-  - `secretsmanager:GetSecretValue` for the ingestion credentials.
+  - `sqs:ReceiveMessage/DeleteMessage` from the upload queue.
 - **`TextractPublishRole`**: A role assumed by the Textract service itself to publish "Job Complete" notifications to our SNS topic.
 
 ### Lambda Functions
 1. **`StartTextractFunction`**:
-   - **Trigger**: EventBridge Rule matching `Object Created` in the Input Bucket.
+   - **Trigger**: SQS Queue (`DocumentUploadQueue`) Event Source Mapping. The Queue receives events from S3 via EventBridge.
    - **Logic**: Calls Textract `StartDocumentAnalysis`, saves `JobId` to DynamoDB.
-2. **`UpdateSalesForceFunction`** (formerly `ProcessTextractFunction`):
+2. **`UpdateSalesForceFunction`**:
    - **Trigger**: SNS Subscription to the `TextractJobCompleteTopic`.
    - **Logic**: Receives `JobId`, checks status, fetches results from Textract, and sends data to Salesforce.
 3. **`ManualLambdaFunction`**:

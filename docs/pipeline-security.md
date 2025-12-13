@@ -20,9 +20,8 @@ This stack receives these parameters from the Root Stack.
 
 | Logical ID | Type | Description |
 | :--- | :--- | :--- |
-| **`PipelineKey`** | `AWS::KMS::Key` | A symmetric encryption key used to encrypt the SNS topic, S3 bucket, and Secrets. It has a key policy allowing access to specific services (SNS, S3, Lambda, Textract). |
+| **`PipelineKey`** | `AWS::KMS::Key` | A symmetric encryption key used to encrypt the SNS topic, S3 bucket, and SQS Queues. It has a key policy allowing access to specific services (SNS, S3, Lambda, Textract). |
 | **`PipelineKeyAlias`** | `AWS::KMS::Alias` | A friendly name for the key: `alias/{ProjectId}-{PortfolioId}-{StackName}-{Env}-key`. |
-| **`IngestionSecret`** | `AWS::SecretsManager::Secret` | Stores the credentials for the Ingestion Lambda to access external APIs. It auto-generates a random password for the `admin` user on creation. |
 
 ## Output Details
 These values are exported to be used by `MessagingStack` (for encryption) and `ComputeStack` (for decryption).
@@ -31,4 +30,3 @@ These values are exported to be used by `MessagingStack` (for encryption) and `C
 | :--- | :--- | :--- |
 | **`PipelineKeyArn`** | `{StackName}-PipelineKeyArn` | The Amazon Resource Name (ARN) of the KMS Key. |
 | **`PipelineKeyId`** | `{StackName}-PipelineKeyId` | The ID of the KMS Key. |
-| **`IngestionSecretArn`** | `{StackName}-IngestionSecretArn` | The ARN of the secret containing API credentials. |
