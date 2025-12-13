@@ -179,10 +179,10 @@ Resources:
   # --------------------------------------------------------------------------
   # 2. Process Textract Results (Triggered by SNS)
   # --------------------------------------------------------------------------
-  ProcessTextractFunction:
+  UpdateSalesForceFunction:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Sub ${ProjectId}-${PortfolioId}-${StackName}-${Environment}-process-textract
+      FunctionName: !Sub ${ProjectId}-${PortfolioId}-${StackName}-${Environment}-update-salesforce
       Runtime: python3.11
       Handler: index.handler
       Role: !GetAtt PipelineLambdaRole.Arn
@@ -229,7 +229,7 @@ Resources:
   ProcessTextractFunctionPermission:
     Type: AWS::Lambda::Permission
     Properties:
-      FunctionName: !Ref ProcessTextractFunction
+      FunctionName: !Ref UpdateSalesForceFunction
       Action: lambda:InvokeFunction
       Principal: sns.amazonaws.com
       SourceArn: !Ref TextractJobCompleteTopicArn
@@ -237,17 +237,17 @@ Resources:
   TextractTopicSubscription:
     Type: AWS::SNS::Subscription
     Properties:
-      Endpoint: !GetAtt ProcessTextractFunction.Arn
+      Endpoint: !GetAtt UpdateSalesForceFunction.Arn
       Protocol: lambda
       TopicArn: !Ref TextractJobCompleteTopicArn
 
   # --------------------------------------------------------------------------
   # 3. Ingestion Function (Scheduled)
   # --------------------------------------------------------------------------
-  IngestionFunction:
+  ManualLambdaFunction:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Sub ${ProjectId}-${PortfolioId}-${StackName}-${Environment}-ingestion
+      FunctionName: !Sub ${ProjectId}-${PortfolioId}-${StackName}-${Environment}-manual
       Runtime: python3.11
       Handler: index.handler
       Role: !GetAtt PipelineLambdaRole.Arn
@@ -279,21 +279,74 @@ Resources:
     Properties:
       ScheduleExpression: rate(1 day)
       Targets:
-        - Arn: !GetAtt IngestionFunction.Arn
+        - Arn: !GetAtt ManualLambdaFunction.Arn
           Id: TargetFunctionV1
 
   IngestionFunctionPermission:
     Type: AWS::Lambda::Permission
+    DependsOn:
+      - IngestionSchedule
     Properties:
-      FunctionName: !Ref IngestionFunction
+      FunctionName: !Ref ManualLambdaFunction
       Action: lambda:InvokeFunction
       Principal: events.amazonaws.com
       SourceArn: !GetAtt IngestionSchedule.Arn
+
+  ClearinghouseFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub ${ProjectId}-${PortfolioId}-${StackName}-${Environment}-clearinghouse
+
+      Runtime: python3.11
+      Handler: index.handler
+      Role: !GetAtt PipelineLambdaRole.Arn
+      Timeout: 300
+      Environment:
+        Variables:
+          BUCKET_NAME: !Ref InputDocumentBucketName
+          SECRET_ARN: !Ref IngestionSecretArn
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import os
+
+          s3 = boto3.client('s3')
+
+          def handler(event, context):
+              print("Scheduled Ingestion Triggered")
+              # Placeholder: Fetch from Parchment/NSC
+              # Upload dummy PDF for testing
+              bucket = os.environ['BUCKET_NAME']
+              key = 'test-document.pdf'
+              s3.put_object(Bucket=bucket, Key=key, Body=b'Dummy content')
+              print(f"Uploaded {key} to {bucket}")
+              return {'status': 'Ingestion Complete'}
+
+  ClearinghouseSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      ScheduleExpression: rate(1 day)
+      Targets:
+        - Arn: !GetAtt ClearinghouseFunction.Arn
+          Id: TargetFunctionV1
+
+  ClearinghouseFunctionPermission:
+    Type: AWS::Lambda::Permission
+    DependsOn:
+      - ClearinghouseSchedule
+    Properties:
+      FunctionName: !Ref ClearinghouseFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt ClearinghouseSchedule.Arn
 
 Outputs:
   StartTextractFunctionArn:
     Value: !GetAtt StartTextractFunction.Arn
   ProcessTextractFunctionArn:
-    Value: !GetAtt ProcessTextractFunction.Arn
-  IngestionFunctionArn:
-    Value: !GetAtt IngestionFunction.Arn
+    Value: !GetAtt UpdateSalesForceFunction.Arn
+  ManualLambdaFunctionArn:
+    Value: !GetAtt ManualLambdaFunction.Arn
+  ClearinghouseFunctionArn:
+    Value: !GetAtt ClearinghouseFunction.Arn

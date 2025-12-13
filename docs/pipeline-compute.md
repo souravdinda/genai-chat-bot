@@ -34,12 +34,15 @@ This stack consumes the outputs from ALL other stacks to wire everything togethe
 1. **`StartTextractFunction`**:
    - **Trigger**: EventBridge Rule matching `Object Created` in the Input Bucket.
    - **Logic**: Calls Textract `StartDocumentAnalysis`, saves `JobId` to DynamoDB.
-2. **`ProcessTextractFunction`**:
+2. **`UpdateSalesForceFunction`** (formerly `ProcessTextractFunction`):
    - **Trigger**: SNS Subscription to the `TextractJobCompleteTopic`.
-   - **Logic**: Receives `JobId`, checks status, fetching results from Textract, and (placeholder) sends data to Salesforce.
-3. **`IngestionFunction`**:
+   - **Logic**: Receives `JobId`, checks status, fetches results from Textract, and sends data to Salesforce.
+3. **`ManualLambdaFunction`**:
    - **Trigger**: EventBridge Schedule (`rate(1 day)`).
-   - **Logic**: Pulls data from external sources (Parchment/NSC) using credentials from Secrets Manager.
+   - **Logic**: Intended for manual or scheduled ingestion of documents.
+4. **`ClearinghouseFunction`**:
+   - **Trigger**: EventBridge Schedule (`rate(1 day)`).
+   - **Logic**: Fetches documents from the Clearinghouse/external sources and uploads to S3.
 
 ## Output Details
 These values are available for reference.
@@ -47,5 +50,6 @@ These values are available for reference.
 | Output Key | Description |
 | :--- | :--- |
 | **`StartTextractFunctionArn`** | The ARN of the function that starts processing. |
-| **`ProcessTextractFunctionArn`** | The ARN of the function that handles results. |
-| **`IngestionFunctionArn`** | The ARN of the scheduled ingestion function. |
+| **`ProcessTextractFunctionArn`** | The ARN of the Salesforce update function. |
+| **`ManualLambdaFunctionArn`** | The ARN of the manual ingestion function. |
+| **`ClearinghouseFunctionArn`** | The ARN of the Clearinghouse ingestion function. |
