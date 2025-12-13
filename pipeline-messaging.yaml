@@ -58,6 +58,14 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
+              Service: s3.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt DocumentUploadQueue.Arn
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+          - Effect: Allow
+            Principal:
               Service: events.amazonaws.com
             Action: sqs:SendMessage
             Resource: !GetAtt DocumentUploadQueue.Arn

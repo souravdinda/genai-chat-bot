@@ -57,6 +57,7 @@ Resources:
   # 4. Storage Stack
   StorageStack:
     Type: AWS::CloudFormation::Stack
+    DependsOn: MessagingStack
     Properties:
       TemplateURL: !Sub https://s3.amazonaws.com/${S3TemplateBucket}/doc-pipeline/pipeline-storage.yaml
       Parameters:
@@ -64,6 +65,7 @@ Resources:
         ProjectId: !Ref ProjectId
         PortfolioId: !Ref PortfolioId
         StackName: !Ref AWS::StackName
+        DocumentUploadQueueArn: !GetAtt MessagingStack.Outputs.DocumentUploadQueueArn
 
   # 5. Compute Stack
   ComputeStack:

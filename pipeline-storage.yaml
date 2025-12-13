@@ -15,6 +15,9 @@ Parameters:
   StackName:
     Type: String
     Description: Name of the stack
+  DocumentUploadQueueArn:
+    Type: String
+    Description: ARN of SQS Queue for notifications
 
 Resources:
   InputDocumentBucket:
@@ -22,8 +25,9 @@ Resources:
     Properties:
       BucketName: !Sub ${ProjectId}-${PortfolioId}-${StackName}-${Environment}-input
       NotificationConfiguration:
-        EventBridgeConfiguration:
-          EventBridgeEnabled: true # Enable EventBridge for S3 events (Clean pattern)
+        QueueConfigurations:
+          - Event: s3:ObjectCreated:*
+            Queue: !Ref DocumentUploadQueueArn
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:

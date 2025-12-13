@@ -22,7 +22,7 @@ This stack receives these parameters from the Root Stack.
 | Logical ID | Type | Description |
 | :--- | :--- | :--- |
 | **`TextractJobCompleteTopic`** | `AWS::SNS::Topic` | The communication channel for Textract completion events. <br>• **Name**: `{ProjectId}-{PortfolioId}-{StackName}-{Env}-textract-complete`<br>• **Encryption**: Encrypted using `KmsKeyArn`. |
-| **`DocumentUploadQueue`** | `AWS::SQS::Queue` | Buffers S3 upload events before they trigger the Lambda. <br>• **Name**: `{ProjectId}-{PortfolioId}-{StackName}-{Env}-doc-upload-queue`<br>• **VisibilityTimeout**: 300s<br>• **RedrivePolicy**: Sends to DLQ after 3 failed attempts. |
+| **`DocumentUploadQueue`** | `AWS::SQS::Queue` | Buffers S3 upload events before they trigger the Lambda. <br>• **Name**: `{ProjectId}-{PortfolioId}-{StackName}-{Env}-doc-upload-queue`<br>• **VisibilityTimeout**: 300s<br>• **RedrivePolicy**: Sends to DLQ after 3 failed attempts.<br>• **Queue Policy**: Allows `s3.amazonaws.com` (from the same account) to send messages to the queue. |
 | **`DocumentUploadDLQ`** | `AWS::SQS::Queue` | Dead Letter Queue for failed messages. <br>• **Name**: `{ProjectId}-{PortfolioId}-{StackName}-{Env}-doc-upload-dlq`<br>• **Retention**: 14 days. |
 
 ## Output Details

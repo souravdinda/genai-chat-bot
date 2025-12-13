@@ -110,10 +110,20 @@ Resources:
           dynamodb = boto3.table(os.environ['JOB_TABLE'])
 
           def handler(event, context):
-              print("Received event:", json.dumps(event))
-              # EventBridge S3 Object Created payload parsing
-              bucket = event['detail']['bucket']['name']
-              key = event['detail']['object']['key']
+              print("Received SQS event:", json.dumps(event))
+              
+              for record in event['Records']:
+                  # SQS Body contains the S3 Event
+                  s3_event = json.loads(record['body'])
+                  
+                  # Some test events might not have Records
+                  if 'Records' not in s3_event:
+                      print("Skipping non-S3 event body:", s3_event)
+                      continue
+                      
+                  for s3_record in s3_event['Records']:
+                      bucket = s3_record['s3']['bucket']['name']
+                      key = s3_record['s3']['object']['key']
 
               print(f"Starting Textract for {bucket}/{key}")
               
@@ -154,21 +164,6 @@ Resources:
                 Resource: !Ref TextractJobCompleteTopicArn
   
   # Trigger rule for StartTextractFunction
-  S3UploadRule:
-    Type: AWS::Events::Rule
-    Properties:
-      EventPattern:
-        source:
-          - aws.s3
-        detail-type:
-          - Object Created
-        detail:
-          bucket:
-            name:
-              - !Ref InputDocumentBucketName
-      Targets:
-        - Arn: !Ref DocumentUploadQueueArn
-          Id: TargetQueueV1
 
   # Trigger Lambda from SQS
   StartTextractEventSourceMapping:

@@ -32,8 +32,8 @@ This stack consumes the outputs from ALL other stacks to wire everything togethe
 
 ### Lambda Functions
 1. **`StartTextractFunction`**:
-   - **Trigger**: SQS Queue (`DocumentUploadQueue`) Event Source Mapping. The Queue receives events from S3 via EventBridge.
-   - **Logic**: Calls Textract `StartDocumentAnalysis`, saves `JobId` to DynamoDB.
+   - **Trigger**: SQS Queue (`DocumentUploadQueue`) Event Source Mapping. The Queue receives native S3 Event Notifications.
+   - **Logic**: Parses SQS body to find S3 event, calls Textract `StartDocumentAnalysis`, saves `JobId` to DynamoDB.
 2. **`UpdateSalesForceFunction`**:
    - **Trigger**: SNS Subscription to the `TextractJobCompleteTopic`.
    - **Logic**: Receives `JobId`, checks status, fetches results from Textract, and sends data to Salesforce.
