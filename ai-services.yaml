@@ -89,20 +89,34 @@ Resources:
           ToPort: 443
           CidrIp: 0.0.0.0/0
 
-  # Lex Bot (Basic Placeholder) - Commented out due to import error
-  # GenAIBot:
-  #   Type: AWS::Lex::Bot
-  #   Properties:
-  #     Name: !Sub GenAIBot_${Environment}
-  #     RoleArn: !GetAtt LexBotRole.Arn
-  #     DataPrivacy:
-  #       ChildDirected: false
-  #     IdleSessionTTLInSeconds: 300
-  #     BotLocales:
-  #       - LocaleId: en_US
-  #         NluConfidenceThreshold: 0.40
-  #         VoiceSettings:
-  #           VoiceId: Joanna
+
+  # Lex Bot (Basic Placeholder)
+  GenAIBot:
+    Type: AWS::Lex::Bot
+    Properties:
+      Name: !Sub GenAIBot_${Environment}
+      RoleArn: !GetAtt LexBotRole.Arn
+      DataPrivacy:
+        ChildDirected: false
+      IdleSessionTTLInSeconds: 300
+      BotLocales:
+        - LocaleId: en_US
+          NluConfidenceThreshold: 0.40
+          VoiceSettings:
+            VoiceId: Joanna
+          Intents:
+            - Name: FallbackIntent
+              ParentIntentSignature: AMAZON.FallbackIntent
+              InitialResponseSetting:
+                InitialResponse:
+                  MessageGroupsList:
+                    - Message:
+                        PlainTextMessage:
+                          Value: "I'm sorry, I didn't understand that. Could you please repeat it?"
+                NextStep:
+                  DialogAction:
+                    Type: EndConversation
+                    SuppressNextMessage: true
 
 Outputs:
   OpenSearchDomainEndpoint:
