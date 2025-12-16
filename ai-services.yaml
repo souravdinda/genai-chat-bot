@@ -268,6 +268,11 @@ Resources:
 #         S3Configuration:
 #           BucketArn: !Sub 'arn:aws:s3:::${ProjectId}-${PortfolioId}-chatbot-${Environment}-kb-${AWS::AccountId}'
 
+# ERROR
+### The following resource(s) failed to create: [BedrockKnowledgeBase].
+##Resource handler returned message: "The specified embedding model arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-image-v1 is not supported. (Service: BedrockAgent, Status Code: 400, Request ID: 729fb5a8-b5b4-4fc1-8aa2-bfb766a541b4) (SDK Attempt Count: 1)" (RequestToken: a9554721-7d41-4b37-0bbb-8755e2a0c72e, HandlerErrorCode: InvalidRequest)
+
+
 Outputs:
   OpenSearchDomainEndpoint:
     Value: !GetAtt OpenSearchDomain.DomainEndpoint
