@@ -118,6 +118,156 @@ Resources:
                     Type: EndConversation
                     SuppressNextMessage: true
 
+  # Bedrock Knowledge Base Implementation
+  # -------------------------------------
+  
+  BedrockExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: bedrock.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: BedrockKBPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: bedrock:InvokeModel
+                Resource: !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.titan-embed-text-v2:0'
+              - Effect: Allow
+                Action: aoss:APIAccessAll
+                Resource: !Sub 'arn:aws:aoss:${AWS::Region}:${AWS::AccountId}:collection/*'
+              - Effect: Allow
+                Action: 
+                  - s3:ListBucket
+                  - s3:GetObject
+                Resource: 
+                  - !Sub 'arn:aws:s3:::${ProjectId}-${PortfolioId}-chatbot-${Environment}-kb-${AWS::AccountId}'
+                  - !Sub 'arn:aws:s3:::${ProjectId}-${PortfolioId}-chatbot-${Environment}-kb-${AWS::AccountId}/*'
+
+  BedrockKBCollection:
+    Type: AWS::OpenSearchServerless::Collection
+    Properties:
+      Name: !Sub 'kb-${ProjectId}-${PortfolioId}-${Environment}'
+      Type: VECTORSEARCH
+      Description: Collection for Bedrock Knowledge Base
+    DependsOn: BedrockKBEncryptionPolicy
+
+  BedrockKBEncryptionPolicy:
+    Type: AWS::OpenSearchServerless::SecurityPolicy
+    Properties:
+      Name: !Sub 'kb-enc-${ProjectId}-${PortfolioId}-${Environment}'
+      Type: encryption
+      Policy: !Sub >-
+        {
+          "Rules": [
+            {
+              "ResourceType": "collection",
+              "Resource": ["collection/kb-${ProjectId}-${PortfolioId}-${Environment}"]
+            }
+          ],
+          "AWSOwnedKey": true
+        }
+
+  BedrockKBNetworkPolicy:
+    Type: AWS::OpenSearchServerless::SecurityPolicy
+    Properties:
+      Name: !Sub 'kb-net-${ProjectId}-${PortfolioId}-${Environment}'
+      Type: network
+      Policy: !Sub >-
+        [
+          {
+            "Description": "Public access for KB collection",
+            "Rules": [
+              {
+                "ResourceType": "collection",
+                "Resource": ["collection/kb-${ProjectId}-${PortfolioId}-${Environment}"]
+              },
+              {
+                "ResourceType": "dashboard",
+                "Resource": ["collection/kb-${ProjectId}-${PortfolioId}-${Environment}"]
+              }
+            ],
+            "AllowFromPublic": true
+          }
+        ]
+
+  BedrockKBAccessPolicy:
+    Type: AWS::OpenSearchServerless::AccessPolicy
+    Properties:
+      Name: !Sub 'kb-acc-${ProjectId}-${PortfolioId}-${Environment}'
+      Type: data
+      Policy: !Sub >-
+        [
+          {
+            "Rules": [
+              {
+                "ResourceType": "collection",
+                "Resource": ["collection/kb-${ProjectId}-${PortfolioId}-${Environment}"],
+                "Permission": [
+                  "aoss:CreateCollectionItems",
+                  "aoss:DeleteCollectionItems",
+                  "aoss:UpdateCollectionItems",
+                  "aoss:DescribeCollectionItems"
+                ]
+              },
+              {
+                "ResourceType": "index",
+                "Resource": ["index/kb-${ProjectId}-${PortfolioId}-${Environment}/*"],
+                "Permission": [
+                  "aoss:CreateIndex",
+                  "aoss:DeleteIndex",
+                  "aoss:UpdateIndex",
+                  "aoss:DescribeIndex",
+                  "aoss:ReadDocument",
+                  "aoss:WriteDocument"
+                ]
+              }
+            ],
+            "Principal": [
+              "${BedrockExecutionRole.Arn}",
+              "arn:aws:iam::${AWS::AccountId}:role/Admin",
+              "arn:aws:iam::${AWS::AccountId}:root",
+              "arn:aws:iam::${AWS::AccountId}:user/sourav"
+            ]
+          }
+        ]
+
+#   BedrockKnowledgeBase:
+#     Type: AWS::Bedrock::KnowledgeBase
+#     Properties:
+#       Name: !Sub 'knowledge-base-${ProjectId}-${PortfolioId}-${Environment}'
+#       RoleArn: !GetAtt BedrockExecutionRole.Arn
+#       KnowledgeBaseConfiguration:
+#         Type: VECTOR
+#         VectorKnowledgeBaseConfiguration:
+#           EmbeddingModelArn: !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.titan-embed-text-v2:0'
+#       StorageConfiguration:
+#         Type: OPENSEARCH_SERVERLESS
+#         OpensearchServerlessConfiguration:
+#           CollectionArn: !GetAtt BedrockKBCollection.Arn
+#           VectorIndexName: 'bedrock-knowledge-base-default-index'
+#           FieldMapping:
+#             VectorField: 'bedrock-knowledge-base-default-vector'
+#             TextField: 'AMAZON_BEDROCK_TEXT'
+#             MetadataField: 'AMAZON_BEDROCK_METADATA'
+#     DependsOn: BedrockKBAccessPolicy
+
+#   BedrockDataSource:
+#     Type: AWS::Bedrock::DataSource
+#     Properties:
+#       KnowledgeBaseId: !Ref BedrockKnowledgeBase
+#       Name: !Sub 'datasource-${ProjectId}-${PortfolioId}-${Environment}'
+#       DataSourceConfiguration:
+#         Type: S3
+#         S3Configuration:
+#           BucketArn: !Sub 'arn:aws:s3:::${ProjectId}-${PortfolioId}-chatbot-${Environment}-kb-${AWS::AccountId}'
+
 Outputs:
   OpenSearchDomainEndpoint:
     Value: !GetAtt OpenSearchDomain.DomainEndpoint

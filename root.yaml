@@ -55,6 +55,7 @@ Resources:
 
   AIServicesStack:
     Type: AWS::CloudFormation::Stack
+    DependsOn: StorageS3Stack
     Properties:
       TemplateURL: !Sub https://s3.amazonaws.com/${S3TemplateBucket}/genai-bot-copy/ai-services.yaml
       Parameters:
