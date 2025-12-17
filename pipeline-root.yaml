@@ -83,6 +83,7 @@ Resources:
         TextractJobCompleteTopicArn: !GetAtt MessagingStack.Outputs.TextractJobCompleteTopicArn
         KmsKeyArn: !GetAtt SecurityStack.Outputs.PipelineKeyArn
         DocumentUploadQueueArn: !GetAtt MessagingStack.Outputs.DocumentUploadQueueArn
+        TextractCompleteQueueArn: !GetAtt MessagingStack.Outputs.TextractCompleteQueueArn
 
 Outputs:
   InputBucket:

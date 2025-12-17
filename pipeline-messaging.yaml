@@ -70,6 +70,51 @@ Resources:
             Action: sqs:SendMessage
             Resource: !GetAtt DocumentUploadQueue.Arn
 
+  # --------------------------------------------------------------------------
+  # SQS Queues for Textract Completion (New)
+  # --------------------------------------------------------------------------
+  TextractCompleteDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub ${ProjectId}-${PortfolioId}-${StackName}-${Environment}-textract-complete-dlq
+      MessageRetentionPeriod: 1209600 # 14 days
+      KmsMasterKeyId: !Ref KmsKeyArn
+
+  TextractCompleteQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub ${ProjectId}-${PortfolioId}-${StackName}-${Environment}-textract-complete-queue
+      MessageRetentionPeriod: 345600 # 4 days
+      VisibilityTimeout: 300
+      KmsMasterKeyId: !Ref KmsKeyArn
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt TextractCompleteDLQ.Arn
+        maxReceiveCount: 3
+
+  TextractCompleteQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref TextractCompleteQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: sns.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt TextractCompleteQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !Ref TextractJobCompleteTopic
+
+  TextractCompleteSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref TextractJobCompleteTopic
+      Endpoint: !GetAtt TextractCompleteQueue.Arn
+      Protocol: sqs
+
 Outputs:
   TextractJobCompleteTopicArn:
     Value: !Ref TextractJobCompleteTopic
@@ -83,3 +128,7 @@ Outputs:
     Value: !Ref DocumentUploadQueue
     Export:
       Name: !Sub ${StackName}-DocumentUploadQueueUrl
+  TextractCompleteQueueArn:
+    Value: !GetAtt TextractCompleteQueue.Arn
+    Export:
+      Name: !Sub ${StackName}-TextractCompleteQueueArn

@@ -30,6 +30,9 @@ Parameters:
   DocumentUploadQueueArn:
     Type: String
     Description: ARN of SQS Queue for document upload events
+  TextractCompleteQueueArn:
+    Type: String
+    Description: ARN of SQS Queue for Textract completion events
 
 Resources:
   PipelineLambdaRole:
@@ -82,7 +85,14 @@ Resources:
                   - sqs:ReceiveMessage
                   - sqs:DeleteMessage
                   - sqs:GetQueueAttributes
-                Resource: !Ref DocumentUploadQueueArn
+              - Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                Resource: 
+                  - !Ref DocumentUploadQueueArn
+                  - !Ref TextractCompleteQueueArn
 
   # --------------------------------------------------------------------------
   # 1. Start Textract Job (Triggered by S3 Event via EventBridge)
@@ -198,15 +208,40 @@ Resources:
           dynamodb = boto3.resource('dynamodb').Table(os.environ['JOB_TABLE'])
 
           def handler(event, context):
-              print("Received SNS event:", json.dumps(event))
-              message = json.loads(event['Records'][0]['Sns']['Message'])
+              print("Received Event:", json.dumps(event))
+              
+              if 'Records' in event:
+                  for record in event['Records']:
+                      # Case 1: SNS Direct Trigger
+                      if 'Sns' in record:
+                          print("Processing SNS Record")
+                          message = json.loads(record['Sns']['Message'])
+                          process_message(message)
+                      
+                      # Case 2: SQS Trigger (Body contains SNS Message)
+                      elif 'body' in record:
+                          print("Processing SQS Record")
+                          sns_notification = json.loads(record['body'])
+                          if 'Message' in sns_notification:
+                              message = json.loads(sns_notification['Message'])
+                              process_message(message)
+                          else:
+                              print("Unknown SQS Body format")
+              
+              return {'status': 'processed'}
+
+          def process_message(message):
               job_id = message['JobId']
               status = message['Status']
+              process_job(job_id, status)
+
+          def process_job(job_id, status):
+              print(f"Processing Job: {job_id}, Status: {status}")
               
               if status == 'SUCCEEDED':
                   print(f"Job {job_id} succeeded. Fetching results...")
                   # In real implementation: handle pagination
-                  response = textract.get_document_analysis(JobId=job_id)
+                  # response = textract.get_document_analysis(JobId=job_id)
                   # Placeholder: Send to Salesforce
                   print("Sending payload to Salesforce...")
                   
@@ -222,7 +257,14 @@ Resources:
                       UpdateExpression="set Status=:s",
                       ExpressionAttributeValues={':s': 'FAILED'}
                   )
-              return {'status': status}
+
+  ProcessTextractEventSourceMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      BatchSize: 10
+      EventSourceArn: !Ref TextractCompleteQueueArn
+      FunctionName: !Ref UpdateSalesForceFunction
+      Enabled: true
 
   ProcessTextractFunctionPermission:
     Type: AWS::Lambda::Permission
