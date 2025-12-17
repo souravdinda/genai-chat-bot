@@ -85,11 +85,6 @@ Resources:
                   - sqs:ReceiveMessage
                   - sqs:DeleteMessage
                   - sqs:GetQueueAttributes
-              - Effect: Allow
-                Action:
-                  - sqs:ReceiveMessage
-                  - sqs:DeleteMessage
-                  - sqs:GetQueueAttributes
                 Resource: 
                   - !Ref DocumentUploadQueueArn
                   - !Ref TextractCompleteQueueArn
