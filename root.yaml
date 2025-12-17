@@ -92,6 +92,8 @@ Resources:
         ContentDesignerFunctionArn: !GetAtt ComputeStack.Outputs.ContentDesignerFunctionArn
         BotFulfillmentFunctionArn: !GetAtt ComputeStack.Outputs.BotFulfillmentFunctionArn
         UserPoolArn: !GetAtt AuthStack.Outputs.UserPoolArn
+        VpcId: !Ref VpcId
+        SubnetIds: !Join [",", !Ref SubnetIds]
 
 Outputs:
   ApiEndpoint:
